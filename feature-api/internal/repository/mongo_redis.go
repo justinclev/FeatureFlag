@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	cacheTTL        = 30 * time.Second
 	cacheKeyAll     = "flags:all"
 	flagCachePrefix = "flags:id:"
 )
@@ -23,13 +22,14 @@ const (
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
 // and Redis as a read-through cache.
 type MongoRedisRepository struct {
-	col *mongo.Collection
-	rdb *redis.Client
+	col      *mongo.Collection
+	rdb      *redis.Client
+	cacheTTL time.Duration
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
-func NewMongoRedisRepository(col *mongo.Collection, rdb *redis.Client) *MongoRedisRepository {
-	return &MongoRedisRepository{col: col, rdb: rdb}
+func NewMongoRedisRepository(col *mongo.Collection, rdb *redis.Client, cacheTTL time.Duration) *MongoRedisRepository {
+	return &MongoRedisRepository{col: col, rdb: rdb, cacheTTL: cacheTTL}
 }
 
 func (r *MongoRedisRepository) List(ctx context.Context) ([]models.Flag, error) {
@@ -55,7 +55,7 @@ func (r *MongoRedisRepository) List(ctx context.Context) ([]models.Flag, error) 
 	}
 
 	if payload, err := json.Marshal(flags); err == nil {
-		_ = r.rdb.Set(ctx, cacheKeyAll, payload, cacheTTL).Err()
+		_ = r.rdb.Set(ctx, cacheKeyAll, payload, r.cacheTTL).Err()
 	}
 	return flags, nil
 }
@@ -83,7 +83,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 	}
 
 	if payload, err := json.Marshal(flag); err == nil {
-		_ = r.rdb.Set(ctx, cacheKey, payload, cacheTTL).Err()
+		_ = r.rdb.Set(ctx, cacheKey, payload, r.cacheTTL).Err()
 	}
 	return &flag, nil
 }

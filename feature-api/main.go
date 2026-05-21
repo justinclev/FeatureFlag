@@ -42,7 +42,7 @@ func main() {
 	defer cache.Close(redisClient)
 
 	eval := evaluator.New()
-	repo := repository.NewMongoRedisRepository(database.Collection("flags"), redisClient)
+	repo := repository.NewMongoRedisRepository(database.Collection("flags"), redisClient, cfg.CacheTTL)
 	h := handlers.New(repo, logger, eval)
 
 	mux := http.NewServeMux()
@@ -50,7 +50,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      middleware.CORS(middleware.Logging(logger, mux)),
+		Handler:      middleware.CORS(cfg.CORSAllowedOrigin, middleware.Logging(logger, mux)),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,

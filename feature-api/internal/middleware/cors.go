@@ -2,10 +2,8 @@ package middleware
 
 import "net/http"
 
-const allowedOrigin = "http://localhost:4200"
-
-// CORS injects permissive cross-origin headers for local development.
-func CORS(next http.Handler) http.Handler {
+// CORS injects cross-origin headers, allowing requests only from allowedOrigin.
+func CORS(allowedOrigin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if origin == allowedOrigin {
