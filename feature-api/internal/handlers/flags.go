@@ -4,34 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
 	"github.com/featureflags/feature-api/internal/repository"
 )
-
-// Handler holds application dependencies and exposes HTTP handler methods.
-type Handler struct {
-	repo   repository.FlagRepository
-	logger *slog.Logger
-}
-
-// New constructs a Handler with the provided dependencies.
-func New(repo repository.FlagRepository, logger *slog.Logger) *Handler {
-	return &Handler{repo: repo, logger: logger}
-}
-
-// RegisterRoutes registers all application routes on mux.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /health", h.health)
-	mux.HandleFunc("GET /api/flags", h.listFlags)
-	mux.HandleFunc("POST /api/flags", h.createFlag)
-	mux.HandleFunc("GET /api/flags/{id}", h.getFlag)
-	mux.HandleFunc("PATCH /api/flags/{id}", h.updateFlag)
-	mux.HandleFunc("DELETE /api/flags/{id}", h.deleteFlag)
-}
 
 func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -127,14 +105,4 @@ func (h *Handler) mapRepoError(w http.ResponseWriter, err error, op string) {
 		h.logger.Error(op, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
 }

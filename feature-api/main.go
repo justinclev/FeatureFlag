@@ -12,6 +12,7 @@ import (
 	"github.com/featureflags/feature-api/internal/cache"
 	"github.com/featureflags/feature-api/internal/config"
 	"github.com/featureflags/feature-api/internal/db"
+	"github.com/featureflags/feature-api/internal/evaluator"
 	"github.com/featureflags/feature-api/internal/handlers"
 	"github.com/featureflags/feature-api/internal/middleware"
 	"github.com/featureflags/feature-api/internal/repository"
@@ -40,8 +41,9 @@ func main() {
 	}
 	defer cache.Close(redisClient)
 
+	eval := evaluator.New()
 	repo := repository.NewMongoRedisRepository(database.Collection("flags"), redisClient)
-	h := handlers.New(repo, logger)
+	h := handlers.New(repo, logger, eval)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
