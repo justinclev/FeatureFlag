@@ -11,7 +11,7 @@ paths:
     get:
       summary: Health check
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -26,14 +26,14 @@ paths:
       security:
         - ApiKeyAuth: []
       responses:
-        '200':
+        "200":
           description: List of flags
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Flag'
+                  $ref: "#/components/schemas/Flag"
     post:
       summary: Create a flag
       security:
@@ -43,14 +43,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateFlagRequest'
+              $ref: "#/components/schemas/CreateFlagRequest"
       responses:
-        '201':
+        "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Flag'
+                $ref: "#/components/schemas/Flag"
   /api/flags/{id}:
     get:
       summary: Get a flag
@@ -63,12 +63,12 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Flag
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Flag'
+                $ref: "#/components/schemas/Flag"
     patch:
       summary: Update a flag
       security:
@@ -84,14 +84,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateFlagRequest'
+              $ref: "#/components/schemas/UpdateFlagRequest"
       responses:
-        '200':
+        "200":
           description: Updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Flag'
+                $ref: "#/components/schemas/Flag"
     delete:
       summary: Delete a flag
       security:
@@ -103,7 +103,7 @@ paths:
           schema:
             type: string
       responses:
-        '204':
+        "204":
           description: Deleted
   /api/flags/{id}/evaluate:
     post:
@@ -121,14 +121,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EvaluationContext'
+              $ref: "#/components/schemas/EvaluationContext"
       responses:
-        '200':
+        "200":
           description: Evaluation result
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EvaluationResult'
+                $ref: "#/components/schemas/EvaluationResult"
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -154,7 +154,7 @@ components:
         rules:
           type: array
           items:
-            $ref: '#/components/schemas/Rule'
+            $ref: "#/components/schemas/Rule"
         createdAt:
           type: string
           format: date-time
@@ -175,7 +175,7 @@ components:
         type:
           type: string
         config:
-          $ref: '#/components/schemas/RuleConfig'
+          $ref: "#/components/schemas/RuleConfig"
         value:
           type: boolean
     RuleConfig:
@@ -265,7 +265,7 @@ components:
         rules:
           type: array
           items:
-            $ref: '#/components/schemas/Rule'
+            $ref: "#/components/schemas/Rule"
         createdBy:
           type: string
     UpdateFlagRequest:
@@ -284,6 +284,6 @@ components:
         rules:
           type: array
           items:
-            $ref: '#/components/schemas/Rule'
+            $ref: "#/components/schemas/Rule"
         updatedBy:
           type: string
