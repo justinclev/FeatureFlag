@@ -1,0 +1,289 @@
+openapi: 3.0.3
+info:
+  title: Feature Flag API
+  version: 1.0.0
+  description: |
+    Feature flag service with CRUD, evaluation, and rule engine.
+servers:
+  - url: http://localhost:8081
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /api/flags:
+    get:
+      summary: List all flags
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: List of flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flag"
+    post:
+      summary: Create a flag
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFlagRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flag"
+  /api/flags/{id}:
+    get:
+      summary: Get a flag
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Flag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flag"
+    patch:
+      summary: Update a flag
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFlagRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flag"
+    delete:
+      summary: Delete a flag
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+  /api/flags/{id}/evaluate:
+    post:
+      summary: Evaluate a flag
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationContext"
+      responses:
+        "200":
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationResult"
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    Flag:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        defaultValue:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rule"
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+    Rule:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        config:
+          $ref: "#/components/schemas/RuleConfig"
+        value:
+          type: boolean
+    RuleConfig:
+      type: object
+      properties:
+        percentage:
+          type: number
+        countries:
+          type: array
+          items:
+            type: string
+        states:
+          type: array
+          items:
+            type: string
+        cities:
+          type: array
+          items:
+            type: string
+        zipCodes:
+          type: array
+          items:
+            type: string
+        enableAt:
+          type: string
+          format: date-time
+        disableAt:
+          type: string
+          format: date-time
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        startPercent:
+          type: number
+        endPercent:
+          type: number
+        userIds:
+          type: array
+          items:
+            type: string
+        attributeKey:
+          type: string
+        attributeOp:
+          type: string
+        attributeValue:
+          type: string
+    EvaluationContext:
+      type: object
+      properties:
+        userId:
+          type: string
+        country:
+          type: string
+        state:
+          type: string
+        city:
+          type: string
+        zipCode:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+    EvaluationResult:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        reason:
+          type: string
+    CreateFlagRequest:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        description:
+          type: string
+        defaultValue:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rule"
+        createdBy:
+          type: string
+    UpdateFlagRequest:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        description:
+          type: string
+        defaultValue:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rule"
+        updatedBy:
+          type: string
