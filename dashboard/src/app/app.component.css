@@ -1,0 +1,22 @@
+.shell {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
+.shell__header {
+	background: #1565c0;
+	color: #fff;
+	padding: 1rem 2rem;
+}
+
+.shell__header h1 {
+	font-size: 1.4rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
+.shell__content {
+	flex: 1;
+	padding: 2rem;
+}

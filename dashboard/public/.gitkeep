@@ -1,0 +1,2 @@
+# Required by angular.json assets glob – place static files here.
+# Angular's application builder copies this folder's contents to dist/dashboard/browser/.
