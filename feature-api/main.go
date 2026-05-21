@@ -50,7 +50,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      middleware.CORS(cfg.CORSAllowedOrigin, middleware.Logging(logger, mux)),
+		Handler:      middleware.CORS(cfg.CORSAllowedOrigin, middleware.Logging(logger, middleware.APIKeyAuth(cfg.APIKey, mux))),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,

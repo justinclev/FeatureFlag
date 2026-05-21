@@ -9,13 +9,14 @@ import (
 
 // Config holds all runtime configuration sourced from environment variables.
 type Config struct {
-	MongoURI           string
-	MongoDBName        string
-	RedisAddr          string
-	RedisPass          string
-	Port               string
-	CORSAllowedOrigin  string
-	CacheTTL           time.Duration
+	MongoURI          string
+	MongoDBName       string
+	RedisAddr         string
+	RedisPass         string
+	Port              string
+	CORSAllowedOrigin string
+	CacheTTL          time.Duration
+	APIKey            string
 }
 
 // Load reads environment variables, applies defaults, and validates required values.
@@ -28,6 +29,7 @@ func Load() (*Config, error) {
 		Port:              getEnv("PORT", "8080"),
 		CORSAllowedOrigin: getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:4200"),
 		CacheTTL:          time.Duration(getEnvInt("CACHE_TTL_SECONDS", 30)) * time.Second,
+		APIKey:            getEnv("API_KEY", ""),
 	}
 
 	if cfg.MongoURI == "" {
@@ -38,6 +40,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.CacheTTL <= 0 {
 		return nil, fmt.Errorf("CACHE_TTL_SECONDS must be a positive integer")
+	}
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("API_KEY must not be empty")
 	}
 
 	return cfg, nil
