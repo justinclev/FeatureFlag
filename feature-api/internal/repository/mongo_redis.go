@@ -89,11 +89,21 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 }
 
 func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error) {
+	now := time.Now().UTC()
 	flag := models.Flag{
-		ID:          bson.NewObjectID(),
-		Name:        req.Name,
-		Enabled:     req.Enabled,
-		Description: req.Description,
+		ID:           bson.NewObjectID(),
+		Name:         req.Name,
+		Key:          req.Key,
+		Enabled:      req.Enabled,
+		Description:  req.Description,
+		DefaultValue: req.DefaultValue,
+		Rules:        req.Rules,
+		CreatedBy:    req.CreatedBy,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if flag.Rules == nil {
+		flag.Rules = []models.Rule{}
 	}
 
 	if _, err := r.col.InsertOne(ctx, flag); err != nil {
@@ -114,14 +124,27 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
+	if req.Key != nil {
+		fields["key"] = *req.Key
+	}
 	if req.Enabled != nil {
 		fields["enabled"] = *req.Enabled
 	}
 	if req.Description != nil {
 		fields["description"] = *req.Description
 	}
+	if req.DefaultValue != nil {
+		fields["defaultValue"] = *req.DefaultValue
+	}
+	if req.Rules != nil {
+		fields["rules"] = *req.Rules
+	}
 	if len(fields) == 0 {
 		return nil, ErrNoFields
+	}
+	fields["updatedAt"] = time.Now().UTC()
+	if req.UpdatedBy != "" {
+		fields["updatedBy"] = req.UpdatedBy
 	}
 
 	result, err := r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": fields})
