@@ -15,31 +15,29 @@ import (
 )
 
 const (
-	cacheKeyAll     = "flags:all"
 	flagCachePrefix = "flags:id:"
 )
+
+type RedisClient interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+}
 
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
 // and Redis as a read-through cache.
 type MongoRedisRepository struct {
 	col      *mongo.Collection
-	rdb      *redis.Client
+	rdb      RedisClient
 	cacheTTL time.Duration
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
-func NewMongoRedisRepository(col *mongo.Collection, rdb *redis.Client, cacheTTL time.Duration) *MongoRedisRepository {
+func NewMongoRedisRepository(col *mongo.Collection, rdb RedisClient, cacheTTL time.Duration) *MongoRedisRepository {
 	return &MongoRedisRepository{col: col, rdb: rdb, cacheTTL: cacheTTL}
 }
 
 func (r *MongoRedisRepository) List(ctx context.Context) ([]models.Flag, error) {
-	if cached, err := r.rdb.Get(ctx, cacheKeyAll).Bytes(); err == nil {
-		var flags []models.Flag
-		if jsonErr := json.Unmarshal(cached, &flags); jsonErr == nil {
-			return flags, nil
-		}
-	}
-
 	cursor, err := r.col.Find(ctx, bson.D{})
 	if err != nil {
 		return nil, fmt.Errorf("find flags: %w", err)
@@ -52,10 +50,6 @@ func (r *MongoRedisRepository) List(ctx context.Context) ([]models.Flag, error) 
 	}
 	if flags == nil {
 		flags = []models.Flag{}
-	}
-
-	if payload, err := json.Marshal(flags); err == nil {
-		_ = r.rdb.Set(ctx, cacheKeyAll, payload, r.cacheTTL).Err()
 	}
 	return flags, nil
 }
@@ -183,5 +177,5 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *MongoRedisRepository) invalidate(ctx context.Context, id string) {
-	_ = r.rdb.Del(ctx, flagCachePrefix+id, cacheKeyAll).Err()
+	_ = r.rdb.Del(ctx, flagCachePrefix+id).Err()
 }
