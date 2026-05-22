@@ -3,6 +3,7 @@ package db
 import (
 	"os"
 	"testing"
+
 	"github.com/featureflags/feature-api/internal/config"
 )
 
