@@ -200,3 +200,47 @@ func TestMapRepoError_NoFields(t *testing.T) {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
+
+func TestListFlags_WithLimitAndOffset(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodGet, "/api/flags?limit=10&offset=5", "")
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestListFlags_WithInvalidLimitAndOffset(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodGet, "/api/flags?limit=abc&offset=xyz", "")
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_RepoError(t *testing.T) {
+	repo := &mockRepo{err: errors.New("db fail")}
+	h := newHandler(repo)
+	rr := serve(h, http.MethodPost, "/api/flags", `{"name":"fail"}`)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+func TestDeleteFlag_Success(t *testing.T) {
+	id := bson.NewObjectID()
+	repo := &mockRepo{flags: []models.Flag{{ID: id, Name: "delete-me"}}}
+	h := newHandler(repo)
+	rr := serve(h, http.MethodDelete, "/api/flags/"+id.Hex(), "")
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d", rr.Code)
+	}
+}
+
+func TestMapRepoError_InternalError(t *testing.T) {
+	repo := &mockRepo{err: errors.New("unexpected error")}
+	h := newHandler(repo)
+	rr := serve(h, http.MethodGet, "/api/flags/"+bson.NewObjectID().Hex(), "")
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}

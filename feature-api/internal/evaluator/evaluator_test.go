@@ -486,3 +486,33 @@ func TestEvaluate_StrategyAll_PartialMatch(t *testing.T) {
 		t.Error("expected fail when only one rule matches in 'all' strategy")
 	}
 }
+
+func TestEvaluate_Gradual_InvalidDuration(t *testing.T) {
+	now := time.Now().UTC()
+	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
+		StartAt:      ptrTime(now),
+		EndAt:        ptrTime(now), // Zero duration
+		StartPercent: ptrFloat(0),
+		EndPercent:   ptrFloat(100),
+	}, true)
+	flag := flagWith([]models.Rule{rule}, false, true)
+	
+	// If now is exactly StartAt, now.Before is false, now.After is false.
+	// It hits the duration check.
+	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
+	if !result.Enabled {
+		t.Error("expected enabled via EndPercent for zero duration")
+	}
+}
+
+func TestEvaluate_Schedule_InvalidRange(t *testing.T) {
+	now := time.Now().UTC()
+	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
+		EnableAt:  ptrTime(now.Add(1 * time.Hour)),
+		DisableAt: ptrTime(now), // Disable before enable
+	}, true)
+	flag := flagWith([]models.Rule{rule}, false, true)
+	if eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
+		t.Error("expected no match for invalid schedule range")
+	}
+}

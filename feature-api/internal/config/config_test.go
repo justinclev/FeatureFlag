@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -77,5 +78,47 @@ func TestLoad_NegativeTTL(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Error("expected error for negative TTL")
+	}
+}
+
+func TestLoad_ValidationErrors(t *testing.T) {
+	// Backup original envs
+	origMongo := os.Getenv("MONGO_URI")
+	origRedis := os.Getenv("REDIS_ADDR")
+	origTTL := os.Getenv("CACHE_TTL_SECONDS")
+	origKey := os.Getenv("API_KEY")
+	
+	defer func() {
+		os.Setenv("MONGO_URI", origMongo)
+		os.Setenv("REDIS_ADDR", origRedis)
+		os.Setenv("CACHE_TTL_SECONDS", origTTL)
+		os.Setenv("API_KEY", origKey)
+	}()
+
+	os.Setenv("MONGO_URI", "")
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "MONGO_URI") {
+		t.Errorf("expected MONGO_URI error, got %v", err)
+	}
+
+	os.Setenv("MONGO_URI", "mongodb://localhost:27017")
+	os.Setenv("REDIS_ADDR", "")
+	_, err = Load()
+	if err == nil || !strings.Contains(err.Error(), "REDIS_ADDR") {
+		t.Errorf("expected REDIS_ADDR error, got %v", err)
+	}
+
+	os.Setenv("REDIS_ADDR", "localhost:6379")
+	os.Setenv("CACHE_TTL_SECONDS", "0")
+	_, err = Load()
+	if err == nil || !strings.Contains(err.Error(), "CACHE_TTL_SECONDS") {
+		t.Errorf("expected CACHE_TTL_SECONDS error, got %v", err)
+	}
+
+	os.Setenv("CACHE_TTL_SECONDS", "30")
+	os.Setenv("API_KEY", "")
+	_, err = Load()
+	if err == nil || !strings.Contains(err.Error(), "API_KEY") {
+		t.Errorf("expected API_KEY error, got %v", err)
 	}
 }

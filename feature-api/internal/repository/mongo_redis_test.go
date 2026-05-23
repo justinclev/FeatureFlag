@@ -59,10 +59,27 @@ func (m *mockMongoCol) FindOneAndUpdate(ctx context.Context, filter interface{},
 	id := f["_id"].(bson.ObjectID)
 	for i, flag := range m.flags {
 		if flag.ID == id {
-			// Basic mock update: only handle name for this test
 			u := update.(bson.M)["$set"].(bson.M)
 			if n, ok := u["name"].(string); ok {
 				m.flags[i].Name = n
+			}
+			if k, ok := u["key"].(string); ok {
+				m.flags[i].Key = k
+			}
+			if e, ok := u["enabled"].(bool); ok {
+				m.flags[i].Enabled = e
+			}
+			if d, ok := u["description"].(string); ok {
+				m.flags[i].Description = d
+			}
+			if dv, ok := u["defaultValue"].(bool); ok {
+				m.flags[i].DefaultValue = dv
+			}
+			if r, ok := u["rules"].([]models.Rule); ok {
+				m.flags[i].Rules = r
+			}
+			if s, ok := u["ruleMatchStrategy"].(models.RuleMatchStrategy); ok {
+				m.flags[i].RuleMatchStrategy = s
 			}
 			return mongo.NewSingleResultFromDocument(m.flags[i], nil, nil)
 		}
@@ -299,5 +316,79 @@ func TestMongoRedisRepository_List_Error(t *testing.T) {
 	_, err := repo.List(ctx, 10, 0)
 	if err == nil || !strings.Contains(err.Error(), "find flags") {
 		t.Errorf("expected error, got %v", err)
+	}
+}
+
+func TestMongoRedisRepository_GetByID_UnmarshalError(t *testing.T) {
+	ctx := context.Background()
+	id := bson.NewObjectID()
+	col := &mockMongoCol{flags: []models.Flag{{ID: id, Name: "flag1"}}}
+	// Redis returns garbage JSON
+	fakeRdb := &fakeRedis{store: map[string][]byte{"test:"+id.Hex(): []byte("invalid-json")}}
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
+
+	// Should fall back to DB
+	flag, err := repo.GetByID(ctx, id.Hex())
+	if err != nil || flag.Name != "flag1" {
+		t.Errorf("expected fallback to DB, got %v, %v", flag, err)
+	}
+}
+
+func TestMongoRedisRepository_List_AllError(t *testing.T) {
+    // This is hard to mock with current mockMongoCol since cursor is opaque.
+    // Skipping for now.
+}
+
+func TestMongoRedisRepository_Create_Error(t *testing.T) {
+	ctx := context.Background()
+	col := &mockMongoCol{err: errors.New("insert fail")}
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	_, err := repo.Create(ctx, models.CreateFlagRequest{Name: "fail"})
+	if err == nil || !strings.Contains(err.Error(), "insert flag") {
+		t.Errorf("expected error, got %v", err)
+	}
+}
+
+func TestMongoRedisRepository_Delete_Error(t *testing.T) {
+	ctx := context.Background()
+	col := &mockMongoCol{err: errors.New("delete fail")}
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	err := repo.Delete(ctx, bson.NewObjectID().Hex())
+	if err == nil || !strings.Contains(err.Error(), "delete flag") {
+		t.Errorf("expected error, got %v", err)
+	}
+}
+
+func TestMongoRedisRepository_Update_AllFields(t *testing.T) {
+	ctx := context.Background()
+	id := bson.NewObjectID()
+	col := &mockMongoCol{flags: []models.Flag{{ID: id, Name: "old"}}}
+	repo := NewMongoRedisRepository(col, &fakeRedis{store: make(map[string][]byte)}, time.Second, "test:")
+
+	name := "new-name"
+	key := "new-key"
+	enabled := true
+	desc := "new-desc"
+	defVal := true
+	rules := []models.Rule{{Type: models.RuleTypePercentage}}
+	strategy := models.RuleMatchStrategyAll
+
+	req := models.UpdateFlagRequest{
+		Name:              &name,
+		Key:               &key,
+		Enabled:           &enabled,
+		Description:       &desc,
+		DefaultValue:      &defVal,
+		Rules:             &rules,
+		RuleMatchStrategy: &strategy,
+		UpdatedBy:         "tester",
+	}
+
+	flag, err := repo.Update(ctx, id.Hex(), req)
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if flag.Name != name || flag.Key != key || flag.Enabled != enabled || flag.RuleMatchStrategy != strategy {
+		t.Errorf("some fields were not updated correctly: %+v", flag)
 	}
 }
