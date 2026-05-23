@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -41,13 +41,15 @@ type MongoRedisRepository struct {
 	cacheTTL    time.Duration
 	cachePrefix string
 	sf          singleflight.Group
-	l1          *lru.Cache[string, *models.Flag]
+	l1          *expirable.LRU[string, *models.Flag]
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
 func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration, cachePrefix string) *MongoRedisRepository {
-	// Initialize L1 cache with 1000 items capacity
-	l1, _ := lru.New[string, *models.Flag](1000)
+	// Initialize L1 cache with 1000 items and a 10-second TTL.
+	// This ensures that even in a multi-node environment, stale data in memory
+	// is purged automatically within 10 seconds.
+	l1 := expirable.NewLRU[string, *models.Flag](1000, nil, 10*time.Second)
 	return &MongoRedisRepository{
 		col:         col,
 		rdb:         rdb,
@@ -234,6 +236,6 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *MongoRedisRepository) invalidate(ctx context.Context, id string) {
-	r.l1.Remove(id)                                    // Clear L1
+	r.l1.Remove(id)                            // Clear L1
 	_ = r.rdb.Del(ctx, r.cachePrefix+id).Err() // Clear L2
 }
