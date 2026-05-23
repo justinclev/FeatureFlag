@@ -94,7 +94,7 @@ type mockEvaluator struct {
 	result models.EvaluationResult
 }
 
-func (m *mockEvaluator) Evaluate(_ models.Flag, _ models.EvaluationContext) models.EvaluationResult {
+func (m *mockEvaluator) Evaluate(_ *models.Flag, _ models.EvaluationContext) models.EvaluationResult {
 	return m.result
 }
 

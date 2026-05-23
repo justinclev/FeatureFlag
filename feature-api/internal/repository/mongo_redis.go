@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -37,21 +38,25 @@ type MongoCollection interface {
 }
 
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
-// and Redis as a read-through cache.
+// and a multi-tier cache (L1 LRU, L2 Redis).
 type MongoRedisRepository struct {
 	col      MongoCollection
 	rdb      RedisClient
 	cacheTTL time.Duration
 	sf       singleflight.Group
+	l1       *lru.Cache[string, *models.Flag]
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
 func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration) *MongoRedisRepository {
+	// Initialize L1 cache with 1000 items capacity
+	l1, _ := lru.New[string, *models.Flag](1000)
 	return &MongoRedisRepository{
 		col:      col,
 		rdb:      rdb,
 		cacheTTL: cacheTTL,
 		sf:       singleflight.Group{},
+		l1:       l1,
 	}
 }
 
@@ -79,23 +84,29 @@ func (r *MongoRedisRepository) List(ctx context.Context, limit, offset int64) ([
 	return flags, nil
 }
 
-// GetByID retrieves a single feature flag by its ID, checking cache first.
+// GetByID retrieves a single feature flag by its ID, checking L1 and L2 cache first.
 func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.Flag, error) {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, ErrInvalidID
 	}
 
+	// Tier 1: L1 In-Memory LRU (Near Zero Cost)
+	if flag, ok := r.l1.Get(id); ok {
+		return flag, nil
+	}
+
 	cacheKey := flagCachePrefix + id
-	// Tier 1: Redis Cache
+	// Tier 2: L2 Redis Cache (Network + JSON Overhead)
 	if cached, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var flag models.Flag
 		if jsonErr := json.Unmarshal(cached, &flag); jsonErr == nil {
+			r.l1.Add(id, &flag) // Promote to L1
 			return &flag, nil
 		}
 	}
 
-	// Tier 2: Singleflight to DB (Prevents Thundering Herd)
+	// Tier 3: Singleflight to DB (Prevents Thundering Herd)
 	val, err, _ := r.sf.Do(id, func() (interface{}, error) {
 		var flag models.Flag
 		if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
@@ -105,9 +116,13 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 			return nil, fmt.Errorf("find flag: %w", err)
 		}
 
+		// Update Redis (L2)
 		if payload, err := json.Marshal(flag); err == nil {
 			_ = r.rdb.Set(ctx, cacheKey, payload, r.cacheTTL).Err()
 		}
+		// Update L1
+		r.l1.Add(id, &flag)
+
 		return &flag, nil
 	})
 
@@ -144,7 +159,7 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 	return &flag, nil
 }
 
-// Update modifies an existing feature flag and invalidates its cache entry.
+// Update modifies an existing feature flag and invalidates all cache tiers.
 func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models.UpdateFlagRequest) (*models.Flag, error) {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -192,7 +207,7 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	return &flag, nil
 }
 
-// Delete removes a feature flag from the database and invalidates its cache entry.
+// Delete removes a feature flag from the database and invalidates all cache tiers.
 func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -212,5 +227,6 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *MongoRedisRepository) invalidate(ctx context.Context, id string) {
-	_ = r.rdb.Del(ctx, flagCachePrefix+id).Err()
+	r.l1.Remove(id)                          // Clear L1
+	_ = r.rdb.Del(ctx, flagCachePrefix+id).Err() // Clear L2
 }

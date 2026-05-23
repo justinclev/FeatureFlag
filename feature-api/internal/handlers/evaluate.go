@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -10,8 +12,14 @@ import (
 )
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+
 	var evalCtx models.EvaluationContext
-	if err := json.NewDecoder(r.Body).Decode(&evalCtx); err != nil {
+	if err := json.Unmarshal(body, &evalCtx); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -25,6 +33,11 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.evaluator.Evaluate(*flag, evalCtx)
-	writeJSON(w, http.StatusOK, result)
+	result := h.evaluator.Evaluate(flag, evalCtx)
+
+	// Performance: Manually write JSON to bypass reflection overhead in json.Encoder
+	// for the high-throughput evaluation hot path (10k+ RPS goal).
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, `{"enabled":%t,"reason":"%s"}`, result.Enabled, result.Reason)
 }

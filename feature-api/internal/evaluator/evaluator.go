@@ -13,7 +13,7 @@ func New() *Evaluator {
 }
 
 // Evaluate determines the enabled state of a flag based on its rules and the provided context.
-func (e *Evaluator) Evaluate(flag models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
+func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
 	if !flag.Enabled {
 		return models.EvaluationResult{Enabled: false, Reason: "flag disabled"}
 	}
