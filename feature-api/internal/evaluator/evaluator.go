@@ -19,7 +19,8 @@ func (e *Evaluator) Evaluate(flag models.Flag, ctx models.EvaluationContext) mod
 	}
 
 	for _, rule := range flag.Rules {
-		if matched, value := evalRule(rule, flag.Key, ctx); matched {
+		matched, value := evalRule(rule, flag.Key, ctx)
+		if matched {
 			return models.EvaluationResult{Enabled: value, Reason: "matched rule: " + string(rule.Type)}
 		}
 	}

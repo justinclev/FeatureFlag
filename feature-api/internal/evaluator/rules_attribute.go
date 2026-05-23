@@ -22,11 +22,22 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 
 	switch rule.Config.AttributeOp {
 	case "eq":
-		matched = actual == expected
+		matched = strings.EqualFold(actual, expected)
 	case "neq":
-		matched = actual != expected
+		matched = !strings.EqualFold(actual, expected)
 	case "contains":
-		matched = strings.Contains(actual, expected)
+		// Check if expected is in actual (e.g. actual="admin,user", expected="admin")
+		// Or if actual is a comma-separated list
+		parts := strings.Split(actual, ",")
+		for _, p := range parts {
+			if strings.TrimSpace(p) == expected {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			matched = strings.Contains(actual, expected)
+		}
 	case "gt", "lt":
 		actualF, err1 := strconv.ParseFloat(actual, 64)
 		expectedF, err2 := strconv.ParseFloat(expected, 64)
@@ -41,6 +52,7 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 	default:
 		return false, false
 	}
+
 	if !matched {
 		return false, false
 	}
