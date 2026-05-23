@@ -25,16 +25,24 @@ type RedisClient interface {
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
 }
 
+type MongoCollection interface {
+	Find(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOptions]) (*mongo.Cursor, error)
+	FindOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOneOptions]) *mongo.SingleResult
+	InsertOne(ctx context.Context, document interface{}, opts ...options.Lister[options.InsertOneOptions]) (*mongo.InsertOneResult, error)
+	FindOneAndUpdate(ctx context.Context, filter interface{}, update interface{}, opts ...options.Lister[options.FindOneAndUpdateOptions]) *mongo.SingleResult
+	DeleteOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error)
+}
+
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
 // and Redis as a read-through cache.
 type MongoRedisRepository struct {
-	col      *mongo.Collection
+	col      MongoCollection
 	rdb      RedisClient
 	cacheTTL time.Duration
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
-func NewMongoRedisRepository(col *mongo.Collection, rdb RedisClient, cacheTTL time.Duration) *MongoRedisRepository {
+func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration) *MongoRedisRepository {
 	return &MongoRedisRepository{col: col, rdb: rdb, cacheTTL: cacheTTL}
 }
 

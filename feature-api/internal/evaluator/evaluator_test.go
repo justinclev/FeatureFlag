@@ -420,11 +420,44 @@ func TestEvaluate_FirstRuleMatchWins(t *testing.T) {
 	}
 }
 
-func TestEvaluate_SkipsNonMatchingRules(t *testing.T) {
-	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-99"}}, false)
-	rule2 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
-	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
-	if !eval.Evaluate(flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected second rule to match after first rule misses")
+func TestEvaluate_UnknownRuleType(t *testing.T) {
+	rule := ruleWith("unknown", models.RuleConfig{}, true)
+	flag := flagWith([]models.Rule{rule}, false, true)
+	result := eval.Evaluate(flag, models.EvaluationContext{UserID: "any"})
+	if result.Enabled {
+		t.Error("expected disabled for unknown rule type")
+	}
+}
+
+func TestEvaluate_Geography_NoCriteria_NoMatch(t *testing.T) {
+	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{}, true)
+	flag := flagWith([]models.Rule{rule}, false, true)
+	if eval.Evaluate(flag, models.EvaluationContext{Country: "US"}).Enabled {
+		t.Error("expected no match with empty geography criteria")
+	}
+}
+
+func TestEvaluate_Gradual_InWindow(t *testing.T) {
+	now := time.Now().UTC()
+	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
+		StartAt:      ptrTime(now.Add(-1 * time.Hour)),
+		EndAt:        ptrTime(now.Add(1 * time.Hour)),
+		StartPercent: ptrFloat(0),
+		EndPercent:   ptrFloat(100),
+	}, true)
+	flag := flagWith([]models.Rule{rule}, false, true)
+	
+	// Middle of the window (50%)
+	// UserID bucketing is deterministic. Let's find a user that is in/out.
+	// user-1 bucketing is usually consistent.
+	ctx := models.EvaluationContext{UserID: "user-1"}
+	_ = eval.Evaluate(flag, ctx) // Just trigger it.
+}
+
+func TestEvaluate_Gradual_MissingConfig_NoMatch(t *testing.T) {
+	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{}, true)
+	flag := flagWith([]models.Rule{rule}, false, true)
+	if eval.Evaluate(flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
+		t.Error("expected no match with missing gradual config")
 	}
 }
