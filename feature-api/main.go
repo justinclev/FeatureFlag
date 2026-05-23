@@ -19,25 +19,31 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("invalid config", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	mongoClient, database, err := db.Connect(cfg)
 	if err != nil {
 		logger.Error("failed to connect to MongoDB", "error", err)
-		os.Exit(1)
+		return err
 	}
 	defer db.Disconnect(mongoClient)
 
 	redisClient, err := cache.Connect(cfg)
 	if err != nil {
 		logger.Error("failed to connect to Redis", "error", err)
-		os.Exit(1)
+		return err
 	}
 	defer cache.Close(redisClient)
 
@@ -63,7 +69,7 @@ func main() {
 		logger.Info("feature-api started", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server error", "error", err)
-			os.Exit(1)
+			stop <- syscall.SIGINT
 		}
 	}()
 
@@ -75,7 +81,8 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
-		os.Exit(1)
+		return err
 	}
 	logger.Info("server stopped")
+	return nil
 }

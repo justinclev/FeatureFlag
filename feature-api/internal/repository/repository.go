@@ -9,7 +9,7 @@ import (
 // FlagRepository defines the storage contract for feature flags.
 // Handlers depend on this interface, not on concrete infrastructure.
 type FlagRepository interface {
-	List(ctx context.Context) ([]models.Flag, error)
+	List(ctx context.Context, limit, offset int64) ([]models.Flag, error)
 	GetByID(ctx context.Context, id string) (*models.Flag, error)
 	Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error)
 	Update(ctx context.Context, id string, req models.UpdateFlagRequest) (*models.Flag, error)

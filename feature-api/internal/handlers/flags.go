@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
@@ -19,7 +20,19 @@ func (h *Handler) listFlags(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	flags, err := h.repo.List(ctx)
+	var limit, offset int64 = 50, 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.ParseInt(l, 10, 64); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.ParseInt(o, 10, 64); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	flags, err := h.repo.List(ctx, limit, offset)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "list flags", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch flags")

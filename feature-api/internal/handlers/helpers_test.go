@@ -20,7 +20,7 @@ type mockRepo struct {
 	err   error
 }
 
-func (m *mockRepo) List(_ context.Context) ([]models.Flag, error) {
+func (m *mockRepo) List(_ context.Context, limit, offset int64) ([]models.Flag, error) {
 	if m.err != nil {
 		return nil, m.err
 	}

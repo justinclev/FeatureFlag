@@ -60,7 +60,7 @@ func TestMongoRedisRepository_List(t *testing.T) {
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
 	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
 
-	flags, err := repo.List(ctx)
+	flags, err := repo.List(ctx, 10, 0)
 	if err != nil || len(flags) != 1 || flags[0].Name != "flag1" {
 		t.Errorf("expected 1 flag, got %v, %v", flags, err)
 	}

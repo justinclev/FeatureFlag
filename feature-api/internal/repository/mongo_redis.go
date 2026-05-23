@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/featureflags/feature-api/internal/models"
 )
@@ -37,8 +38,14 @@ func NewMongoRedisRepository(col *mongo.Collection, rdb RedisClient, cacheTTL ti
 	return &MongoRedisRepository{col: col, rdb: rdb, cacheTTL: cacheTTL}
 }
 
-func (r *MongoRedisRepository) List(ctx context.Context) ([]models.Flag, error) {
-	cursor, err := r.col.Find(ctx, bson.D{})
+func (r *MongoRedisRepository) List(ctx context.Context, limit, offset int64) ([]models.Flag, error) {
+	opts := options.Find()
+	if limit > 0 {
+		opts.SetLimit(limit)
+	}
+	opts.SetSkip(offset)
+
+	cursor, err := r.col.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("find flags: %w", err)
 	}
@@ -141,20 +148,17 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 		fields["updatedBy"] = req.UpdatedBy
 	}
 
-	result, err := r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": fields})
+	var flag models.Flag
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	err = r.col.FindOneAndUpdate(ctx, bson.M{"_id": oid}, bson.M{"$set": fields}, opts).Decode(&flag)
 	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("update flag: %w", err)
-	}
-	if result.MatchedCount == 0 {
-		return nil, ErrNotFound
 	}
 
 	r.invalidate(ctx, id)
-
-	var flag models.Flag
-	if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
-		return nil, fmt.Errorf("fetch updated flag: %w", err)
-	}
 	return &flag, nil
 }
 
