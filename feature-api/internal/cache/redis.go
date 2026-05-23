@@ -14,6 +14,9 @@ import (
 // Connect creates a Redis client and verifies connectivity with PING.
 // The caller owns the client lifecycle and must call Close.
 func Connect(cfg *config.Config) (*redis.Client, error) {
+	if cfg.RedisAddr == "" {
+		return nil, fmt.Errorf("redis address is required")
+	}
 	client := redis.NewClient(&redis.Options{
 		Addr:         cfg.RedisAddr,
 		Password:     cfg.RedisPass,
