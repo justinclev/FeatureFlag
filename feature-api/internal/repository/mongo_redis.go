@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/featureflags/feature-api/internal/models"
 )
@@ -41,11 +42,17 @@ type MongoRedisRepository struct {
 	col      MongoCollection
 	rdb      RedisClient
 	cacheTTL time.Duration
+	sf       singleflight.Group
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
 func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration) *MongoRedisRepository {
-	return &MongoRedisRepository{col: col, rdb: rdb, cacheTTL: cacheTTL}
+	return &MongoRedisRepository{
+		col:      col,
+		rdb:      rdb,
+		cacheTTL: cacheTTL,
+		sf:       singleflight.Group{},
+	}
 }
 
 // List returns a page of feature flags from the database.
@@ -80,6 +87,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 	}
 
 	cacheKey := flagCachePrefix + id
+	// Tier 1: Redis Cache
 	if cached, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var flag models.Flag
 		if jsonErr := json.Unmarshal(cached, &flag); jsonErr == nil {
@@ -87,18 +95,26 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 		}
 	}
 
-	var flag models.Flag
-	if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, ErrNotFound
+	// Tier 2: Singleflight to DB (Prevents Thundering Herd)
+	val, err, _ := r.sf.Do(id, func() (interface{}, error) {
+		var flag models.Flag
+		if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				return nil, ErrNotFound
+			}
+			return nil, fmt.Errorf("find flag: %w", err)
 		}
-		return nil, fmt.Errorf("find flag: %w", err)
-	}
 
-	if payload, err := json.Marshal(flag); err == nil {
-		_ = r.rdb.Set(ctx, cacheKey, payload, r.cacheTTL).Err()
+		if payload, err := json.Marshal(flag); err == nil {
+			_ = r.rdb.Set(ctx, cacheKey, payload, r.cacheTTL).Err()
+		}
+		return &flag, nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
-	return &flag, nil
+	return val.(*models.Flag), nil
 }
 
 // Create inserts a new feature flag into the database.
