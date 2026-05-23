@@ -68,7 +68,7 @@ func TestListFlags_ReturnsList(t *testing.T) {
 
 func TestCreateFlag_MissingName(t *testing.T) {
 	h := newHandler(&mockRepo{})
-	rr := serve(h, http.MethodPost, "/api/flags", `{"enabled":true}`)
+	rr := serve(h, http.MethodPost, "/api/flags", `{"key":"k","enabled":true}`)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
@@ -77,7 +77,7 @@ func TestCreateFlag_MissingName(t *testing.T) {
 
 func TestCreateFlag_Success(t *testing.T) {
 	h := newHandler(&mockRepo{})
-	rr := serve(h, http.MethodPost, "/api/flags", `{"name":"beta","enabled":false}`)
+	rr := serve(h, http.MethodPost, "/api/flags", `{"name":"beta","key":"beta-key","enabled":false}`)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rr.Code)
@@ -220,7 +220,7 @@ func TestListFlags_WithInvalidLimitAndOffset(t *testing.T) {
 func TestCreateFlag_RepoError(t *testing.T) {
 	repo := &mockRepo{err: errors.New("db fail")}
 	h := newHandler(repo)
-	rr := serve(h, http.MethodPost, "/api/flags", `{"name":"fail"}`)
+	rr := serve(h, http.MethodPost, "/api/flags", `{"name":"fail","key":"fail-key"}`)
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", rr.Code)
 	}
@@ -242,5 +242,59 @@ func TestMapRepoError_InternalError(t *testing.T) {
 	rr := serve(h, http.MethodGet, "/api/flags/"+bson.NewObjectID().Hex(), "")
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+func TestHealth_Error(t *testing.T) {
+	repo := &mockRepo{err: errors.New("not ready")}
+	h := newHandler(repo)
+	rr := serve(h, http.MethodGet, "/health", "")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_InvalidRule(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	// Missing percentage in config
+	body := `{"name":"n","key":"k","rules":[{"type":"percentage","config":{}}]}`
+	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestUpdateFlag_InvalidRule(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	body := `{"rules":[{"type":"attribute","config":{"attributeKey":"k"}}]}` // missing op
+	rr := serve(h, http.MethodPatch, "/api/flags/id", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_MissingKey(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodPost, "/api/flags", `{"name":"n"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_RuleMissingType(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	body := `{"name":"n","key":"k","rules":[{"config":{}}]}`
+	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_GradualMissingFields(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	body := `{"name":"n","key":"k","rules":[{"type":"gradual","config":{}}]}`
+	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }

@@ -102,6 +102,13 @@ func (m *mockMongoCol) DeleteOne(ctx context.Context, filter interface{}, opts .
 	return &mongo.DeleteResult{DeletedCount: 0}, nil
 }
 
+func (m *mockMongoCol) Database() *mongo.Database {
+    // This is hard to mock because we need a real Database object to call Client().Ping()
+    // For unit tests, we'll assume the implementation doesn't call it if we don't test Ready here,
+    // or we'll have to refactor the repository to use a Pinger interface.
+    return nil 
+}
+
 func (m *mockMongoCol) toDocuments() []interface{} {
 	docs := make([]interface{}, len(m.flags))
 	for i, f := range m.flags {
@@ -138,6 +145,16 @@ func (f *fakeRedis) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 		delete(f.store, k)
 	}
 	return cmd
+}
+
+func (f *fakeRedis) Ping(ctx context.Context) *redis.StatusCmd {
+    cmd := redis.NewStatusCmd(ctx)
+    if f.err != nil {
+        cmd.SetErr(f.err)
+    } else {
+        cmd.SetVal("PONG")
+    }
+    return cmd
 }
 
 func TestMongoRedisRepository_List(t *testing.T) {

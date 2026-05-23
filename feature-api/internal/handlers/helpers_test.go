@@ -90,6 +90,10 @@ func (m *mockRepo) Delete(_ context.Context, id string) error {
 	return repository.ErrNotFound
 }
 
+func (m *mockRepo) Ready(_ context.Context) error {
+	return m.err
+}
+
 type mockEvaluator struct {
 	result models.EvaluationResult
 }

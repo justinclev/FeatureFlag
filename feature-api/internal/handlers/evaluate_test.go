@@ -56,3 +56,11 @@ func TestEvaluateFlag_BadBody(t *testing.T) {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
+
+func TestEvaluateFlag_InvalidJSON(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodPost, "/api/flags/id/evaluate", "invalid-json")
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}

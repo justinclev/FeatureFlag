@@ -22,6 +22,7 @@ type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Ping(ctx context.Context) *redis.StatusCmd
 }
 
 // MongoCollection defines the subset of mongo.Collection methods used by the repository.
@@ -31,6 +32,7 @@ type MongoCollection interface {
 	InsertOne(ctx context.Context, document interface{}, opts ...options.Lister[options.InsertOneOptions]) (*mongo.InsertOneResult, error)
 	FindOneAndUpdate(ctx context.Context, filter interface{}, update interface{}, opts ...options.Lister[options.FindOneAndUpdateOptions]) *mongo.SingleResult
 	DeleteOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error)
+	Database() *mongo.Database
 }
 
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
@@ -238,4 +240,15 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 func (r *MongoRedisRepository) invalidate(ctx context.Context, id string) {
 	r.l1.Remove(id)                            // Clear L1
 	_ = r.rdb.Del(ctx, r.cachePrefix+id).Err() // Clear L2
+}
+
+// Ready verifies that both MongoDB and Redis are reachable.
+func (r *MongoRedisRepository) Ready(ctx context.Context) error {
+	if err := r.rdb.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("redis not ready: %w", err)
+	}
+	if err := r.col.Database().Client().Ping(ctx, nil); err != nil {
+		return fmt.Errorf("mongodb not ready: %w", err)
+	}
+	return nil
 }

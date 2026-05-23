@@ -14,4 +14,5 @@ type FlagRepository interface {
 	Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error)
 	Update(ctx context.Context, id string, req models.UpdateFlagRequest) (*models.Flag, error)
 	Delete(ctx context.Context, id string) error
+	Ready(ctx context.Context) error
 }
