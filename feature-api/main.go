@@ -25,13 +25,23 @@ func main() {
 }
 
 func run() error {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error("invalid config", "error", err)
 		return err
 	}
+
+	var level slog.Level
+	switch cfg.LogLevel {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
 	mongoClient, database, err := db.Connect(cfg)
 	if err != nil {
@@ -48,7 +58,7 @@ func run() error {
 	defer cache.Close(redisClient)
 
 	eval := evaluator.New()
-	repo := repository.NewMongoRedisRepository(database.Collection("flags"), redisClient, cfg.CacheTTL)
+	repo := repository.NewMongoRedisRepository(database.Collection(cfg.MongoCollectionName), redisClient, cfg.CacheTTL, cfg.RedisCachePrefix)
 	h := handlers.New(repo, logger, eval)
 
 	mux := http.NewServeMux()

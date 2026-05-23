@@ -2,6 +2,7 @@ import requests
 import random
 import json
 import time
+import math
 from datetime import datetime
 
 API_URL = "http://localhost:8081/api/flags"
@@ -18,24 +19,37 @@ def fnv1a_64(data):
     return hash_val
 
 def get_bucket(flag_key, user_id):
-    """Calculates deterministic bucket [0-99] for a user."""
-    if not user_id: return 100
+    """Calculates deterministic bucket [0-99.99] for a user with 0.01 precision."""
+    if not user_id: return 100.0
     h = fnv1a_64(f"{flag_key}:{user_id}")
-    return h % 100
+    return (h % 10000) / 100.0
 
 def predict_evaluation(flag, context):
     """Local implementation of evaluation logic matching Go backend exactly."""
     if not flag.get("enabled", True):
         return False, "flag disabled"
     
-    flag_key = flag.get("key")
     rules = flag.get("rules", [])
-    for rule in rules:
-        matched, value = eval_rule(rule, flag_key, context)
-        if matched:
-            return value, f"matched rule: {rule.get('type')}"
-            
-    return flag.get("defaultValue", False), "default value"
+    if not rules:
+        return flag.get("defaultValue", False), "default value (no rules)"
+
+    strategy = flag.get("ruleMatchStrategy", "any")
+
+    if strategy == "all":
+        last_value = False
+        for rule in rules:
+            matched, value = eval_rule(rule, flag.get("key"), context)
+            if not matched:
+                return flag.get("defaultValue", False), f"failed rule: {rule.get('type')}"
+            last_value = value
+        return last_value, "matched all rules"
+    else:
+        # Default: ANY
+        for rule in rules:
+            matched, value = eval_rule(rule, flag.get("key"), context)
+            if matched:
+                return value, f"matched rule: {rule.get('type')}"
+        return flag.get("defaultValue", False), "default value"
 
 def eval_rule(rule, flag_key, ctx):
     rtype = rule.get("type")
@@ -61,8 +75,12 @@ def eval_rule(rule, flag_key, ctx):
             if now < start_at: eff_p = start_p
             elif now > end_at: eff_p = end_p
             else:
-                progress = (now - start_at).total_seconds() / (end_at - start_at).total_seconds()
-                eff_p = start_p + progress * (end_p - start_p)
+                duration = (end_at - start_at).total_seconds()
+                if duration <= 0:
+                    eff_p = end_p
+                else:
+                    progress = (now - start_at).total_seconds() / duration
+                    eff_p = start_p + progress * (end_p - start_p)
             bucket = get_bucket(flag_key, user_id)
             return bucket < eff_p, val
         except: return False, False
@@ -78,8 +96,6 @@ def eval_rule(rule, flag_key, ctx):
         except: return False, False
 
     elif rtype == "geography":
-        # Go logic: If category provided, context MUST match one entry in that category.
-        # It's an AND between categories (Country AND State AND City AND Zip).
         if not any([cfg.get("countries"), cfg.get("states"), cfg.get("cities"), cfg.get("zipCodes")]):
             return False, False
 
@@ -93,7 +109,7 @@ def eval_rule(rule, flag_key, ctx):
             if not any(c.lower() == ctx.get("city", "").lower() for c in cfg["cities"]):
                 return False, False
         if cfg.get("zipCodes"):
-            if ctx.get("zipCode") not in cfg["zipCodes"]: # Zip is case sensitive in Go? (Wait, checking Go again...)
+            if ctx.get("zipCode") not in cfg["zipCodes"]:
                 return False, False
         return True, val
 
@@ -102,9 +118,12 @@ def eval_rule(rule, flag_key, ctx):
         if not attr_key or attr_key not in ctx.get("attributes", {}): return False, False
         ctx_val = ctx["attributes"][attr_key]
         op, cfg_val = cfg.get("attributeOp"), cfg.get("attributeValue")
-        if op == "eq": return (ctx_val == cfg_val), val
-        if op == "neq": return (ctx_val != cfg_val), val
-        if op == "contains": return (cfg_val in ctx_val), val
+        if op == "eq": return (ctx_val.lower() == cfg_val.lower()), val
+        if op == "neq": return (ctx_val.lower() != cfg_val.lower()), val
+        if op == "contains":
+            parts = [p.strip() for p in ctx_val.split(",")]
+            if cfg_val in parts: return True, val
+            return (cfg_val.lower() in ctx_val.lower()), val
         return False, False
 
     return False, False
@@ -123,7 +142,7 @@ def generate_context_for_test(flag, rule, force_match):
 
     if not force_match:
         ctx["userId"] = "mismatch-user-9999"
-        ctx["country"] = "ZZ" # Will fail geography if countries are defined
+        ctx["country"] = "ZZ"
         ctx["state"] = "MismatchState"
         return ctx
 
@@ -131,13 +150,12 @@ def generate_context_for_test(flag, rule, force_match):
         ctx["userId"] = cfg["userIds"][0]
     elif rtype == "percentage":
         target_p = cfg.get("percentage", 0)
-        for i in range(1000):
+        for i in range(10000):
             uid = f"user-{i}"
             if get_bucket(flag_key, uid) < target_p:
                 ctx["userId"] = uid
                 break
     elif rtype == "geography":
-        # MUST satisfy ALL defined categories
         if cfg.get("countries"): ctx["country"] = cfg["countries"][0]
         if cfg.get("states"): ctx["state"] = cfg["states"][0]
         if cfg.get("cities"): ctx["city"] = cfg["cities"][0]
@@ -161,7 +179,7 @@ def main():
     stats_total = {"passed": 0, "failed": 0}
     stats_types = {}
 
-    print(f"Running 200 tests with FNV-1a bucketing...")
+    print(f"Running 200 tests with ANY/ALL strategy and 0.01 precision...")
 
     for i in range(200):
         flag = random.choice(flags)
@@ -188,6 +206,7 @@ def main():
             stats_types[rtype]["passed"] += 1
         else:
             stats_total["failed"] += 1
+            # print(f"FAIL: Flag {flag['key']} Strategy {flag.get('ruleMatchStrategy')} Expected {expected_enabled} Got {actual_enabled}")
 
     # Summary
     print("\n" + "="*45)

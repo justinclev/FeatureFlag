@@ -1,5 +1,3 @@
-
-
 import random
 import string
 import time
@@ -69,7 +67,8 @@ def random_flag():
         'enabled': random.choice([True, False]),
         'description': 'Randomly generated feature flag',
         'defaultValue': random.choice([True, False]),
-        'rules': [random_rule()],
+        'rules': [random_rule() for _ in range(random.randint(1, 3))],
+        'ruleMatchStrategy': random.choice(['any', 'all']),
         'createdAt': now,
         'createdBy': 'seed-script',
         'updatedAt': now,
@@ -90,11 +89,12 @@ def insert_random_flags(n=20, api_url="http://localhost:8081/api/flags"):
             "description": flag["description"],
             "defaultValue": flag["defaultValue"],
             "rules": flag["rules"],
+            "ruleMatchStrategy": flag["ruleMatchStrategy"],
             "createdBy": flag["createdBy"]
         }
         resp = requests.post(api_url, json=payload, headers=headers)
         if resp.status_code == 201:
-            print(f"Inserted flag: {flag['key']}")
+            print(f"Inserted flag: {flag['key']} (strategy: {flag['ruleMatchStrategy']})")
             success += 1
         else:
             print(f"Failed to insert flag: {flag['key']} (status {resp.status_code}) - {resp.text}")

@@ -17,10 +17,6 @@ import (
 	"github.com/featureflags/feature-api/internal/models"
 )
 
-const (
-	flagCachePrefix = "flags:id:"
-)
-
 // RedisClient defines the subset of redis.Client methods used by the repository.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
@@ -40,23 +36,25 @@ type MongoCollection interface {
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
 // and a multi-tier cache (L1 LRU, L2 Redis).
 type MongoRedisRepository struct {
-	col      MongoCollection
-	rdb      RedisClient
-	cacheTTL time.Duration
-	sf       singleflight.Group
-	l1       *lru.Cache[string, *models.Flag]
+	col         MongoCollection
+	rdb         RedisClient
+	cacheTTL    time.Duration
+	cachePrefix string
+	sf          singleflight.Group
+	l1          *lru.Cache[string, *models.Flag]
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
-func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration) *MongoRedisRepository {
+func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration, cachePrefix string) *MongoRedisRepository {
 	// Initialize L1 cache with 1000 items capacity
 	l1, _ := lru.New[string, *models.Flag](1000)
 	return &MongoRedisRepository{
-		col:      col,
-		rdb:      rdb,
-		cacheTTL: cacheTTL,
-		sf:       singleflight.Group{},
-		l1:       l1,
+		col:         col,
+		rdb:         rdb,
+		cacheTTL:    cacheTTL,
+		cachePrefix: cachePrefix,
+		sf:          singleflight.Group{},
+		l1:          l1,
 	}
 }
 
@@ -96,7 +94,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 		return flag, nil
 	}
 
-	cacheKey := flagCachePrefix + id
+	cacheKey := r.cachePrefix + id
 	// Tier 2: L2 Redis Cache (Network + JSON Overhead)
 	if cached, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var flag models.Flag
@@ -135,17 +133,23 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 // Create inserts a new feature flag into the database.
 func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error) {
 	now := time.Now().UTC()
+	strategy := req.RuleMatchStrategy
+	if strategy == "" {
+		strategy = models.RuleMatchStrategyAny
+	}
+
 	flag := models.Flag{
-		ID:           bson.NewObjectID(),
-		Name:         req.Name,
-		Key:          req.Key,
-		Enabled:      req.Enabled,
-		Description:  req.Description,
-		DefaultValue: req.DefaultValue,
-		Rules:        req.Rules,
-		CreatedBy:    req.CreatedBy,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                bson.NewObjectID(),
+		Name:              req.Name,
+		Key:               req.Key,
+		Enabled:           req.Enabled,
+		Description:       req.Description,
+		DefaultValue:      req.DefaultValue,
+		Rules:             req.Rules,
+		RuleMatchStrategy: strategy,
+		CreatedBy:         req.CreatedBy,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	if flag.Rules == nil {
 		flag.Rules = []models.Rule{}
@@ -184,6 +188,9 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	}
 	if req.Rules != nil {
 		fields["rules"] = *req.Rules
+	}
+	if req.RuleMatchStrategy != nil {
+		fields["ruleMatchStrategy"] = *req.RuleMatchStrategy
 	}
 	if len(fields) == 0 {
 		return nil, ErrNoFields
@@ -227,6 +234,6 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *MongoRedisRepository) invalidate(ctx context.Context, id string) {
-	r.l1.Remove(id)                          // Clear L1
-	_ = r.rdb.Del(ctx, flagCachePrefix+id).Err() // Clear L2
+	r.l1.Remove(id)                                    // Clear L1
+	_ = r.rdb.Del(ctx, r.cachePrefix+id).Err() // Clear L2
 }

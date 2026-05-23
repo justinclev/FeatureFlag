@@ -6,10 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
 )
+
+var evalCtxPool = sync.Pool{
+	New: func() any {
+		return &models.EvaluationContext{}
+	},
+}
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
@@ -18,8 +25,12 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var evalCtx models.EvaluationContext
-	if err := json.Unmarshal(body, &evalCtx); err != nil {
+	evalCtx := evalCtxPool.Get().(*models.EvaluationContext)
+	// Clear the struct for reuse
+	*evalCtx = models.EvaluationContext{}
+	defer evalCtxPool.Put(evalCtx)
+
+	if err := json.Unmarshal(body, evalCtx); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -33,7 +44,7 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.evaluator.Evaluate(flag, evalCtx)
+	result := h.evaluator.Evaluate(flag, *evalCtx)
 
 	// Performance: Manually write JSON to bypass reflection overhead in json.Encoder
 	// for the high-throughput evaluation hot path (10k+ RPS goal).

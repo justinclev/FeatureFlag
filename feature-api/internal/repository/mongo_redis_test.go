@@ -2,42 +2,20 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
-
 	"testing"
 	"time"
 
-	"github.com/featureflags/feature-api/internal/models"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/featureflags/feature-api/internal/models"
 )
 
-type fakeRedis struct {
-	store map[string][]byte
-}
-
-func (f *fakeRedis) Get(ctx context.Context, key string) *redis.StringCmd {
-	if val, ok := f.store[key]; ok {
-		return redis.NewStringResult(string(val), nil)
-	}
-	return redis.NewStringResult("", errors.New("not found"))
-}
-func (f *fakeRedis) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.StatusCmd {
-	b, _ := json.Marshal(value)
-	f.store[key] = b
-	return redis.NewStatusResult("OK", nil)
-}
-func (f *fakeRedis) Del(ctx context.Context, keys ...string) *redis.IntCmd {
-	for _, k := range keys {
-		delete(f.store, k)
-	}
-	return redis.NewIntResult(int64(len(keys)), nil)
-}
-
+// mockMongoCol implements MongoCollection for testing.
 type mockMongoCol struct {
 	flags []models.Flag
 	err   error
@@ -52,42 +30,44 @@ func (m *mockMongoCol) Find(ctx context.Context, filter interface{}, opts ...opt
 
 func (m *mockMongoCol) FindOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOneOptions]) *mongo.SingleResult {
 	if m.err != nil {
-		return mongo.NewSingleResultFromDocument(bson.D{}, m.err, nil)
+		return mongo.NewSingleResultFromDocument(struct{}{}, m.err, nil)
 	}
-	f, ok := filter.(bson.M)
-	if !ok {
-		return mongo.NewSingleResultFromDocument(bson.D{}, errors.New("invalid filter type"), nil)
-	}
+	f := filter.(bson.M)
 	id := f["_id"].(bson.ObjectID)
 	for _, flag := range m.flags {
 		if flag.ID == id {
 			return mongo.NewSingleResultFromDocument(flag, nil, nil)
 		}
 	}
-	return mongo.NewSingleResultFromDocument(bson.D{}, mongo.ErrNoDocuments, nil)
+	return mongo.NewSingleResultFromDocument(struct{}{}, mongo.ErrNoDocuments, nil)
 }
 
 func (m *mockMongoCol) InsertOne(ctx context.Context, document interface{}, opts ...options.Lister[options.InsertOneOptions]) (*mongo.InsertOneResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	flag := document.(models.Flag)
-	m.flags = append(m.flags, flag)
-	return &mongo.InsertOneResult{InsertedID: flag.ID}, nil
+	f := document.(models.Flag)
+	m.flags = append(m.flags, f)
+	return &mongo.InsertOneResult{InsertedID: f.ID}, nil
 }
 
 func (m *mockMongoCol) FindOneAndUpdate(ctx context.Context, filter interface{}, update interface{}, opts ...options.Lister[options.FindOneAndUpdateOptions]) *mongo.SingleResult {
 	if m.err != nil {
-		return mongo.NewSingleResultFromDocument(bson.D{}, m.err, nil)
+		return mongo.NewSingleResultFromDocument(struct{}{}, m.err, nil)
 	}
 	f := filter.(bson.M)
 	id := f["_id"].(bson.ObjectID)
 	for i, flag := range m.flags {
 		if flag.ID == id {
+			// Basic mock update: only handle name for this test
+			u := update.(bson.M)["$set"].(bson.M)
+			if n, ok := u["name"].(string); ok {
+				m.flags[i].Name = n
+			}
 			return mongo.NewSingleResultFromDocument(m.flags[i], nil, nil)
 		}
 	}
-	return mongo.NewSingleResultFromDocument(bson.D{}, mongo.ErrNoDocuments, nil)
+	return mongo.NewSingleResultFromDocument(struct{}{}, mongo.ErrNoDocuments, nil)
 }
 
 func (m *mockMongoCol) DeleteOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error) {
@@ -113,11 +93,41 @@ func (m *mockMongoCol) toDocuments() []interface{} {
 	return docs
 }
 
+// fakeRedis implements RedisClient for testing.
+type fakeRedis struct {
+	store map[string][]byte
+	err   error
+}
+
+func (f *fakeRedis) Get(ctx context.Context, key string) *redis.StringCmd {
+	cmd := redis.NewStringCmd(ctx)
+	if val, ok := f.store[key]; ok {
+		cmd.SetVal(string(val))
+	} else {
+		cmd.SetErr(redis.Nil)
+	}
+	return cmd
+}
+
+func (f *fakeRedis) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+	cmd := redis.NewStatusCmd(ctx)
+	f.store[key] = value.([]byte)
+	return cmd
+}
+
+func (f *fakeRedis) Del(ctx context.Context, keys ...string) *redis.IntCmd {
+	cmd := redis.NewIntCmd(ctx)
+	for _, k := range keys {
+		delete(f.store, k)
+	}
+	return cmd
+}
+
 func TestMongoRedisRepository_List(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{flags: []models.Flag{{ID: bson.NewObjectID(), Name: "flag1"}}}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
 
 	flags, err := repo.List(ctx, 10, 5)
 	if err != nil || len(flags) != 1 || flags[0].Name != "flag1" {
@@ -129,7 +139,7 @@ func TestMongoRedisRepository_List_Empty(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{flags: nil}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
 
 	flags, err := repo.List(ctx, 0, 0)
 	if err != nil || len(flags) != 0 {
@@ -142,7 +152,7 @@ func TestMongoRedisRepository_GetByID(t *testing.T) {
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Name: "flag1"}}}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
 
 	// Test cache miss
 	flag, err := repo.GetByID(ctx, id.Hex())
@@ -151,9 +161,13 @@ func TestMongoRedisRepository_GetByID(t *testing.T) {
 	}
 
 	// Test cache hit
-	flag, err = repo.GetByID(ctx, id.Hex())
-	if err != nil || flag.Name != "flag1" {
-		t.Errorf("expected flag1 from cache, got %v, %v", flag, err)
+	if _, ok := fakeRdb.store["test:"+id.Hex()]; !ok {
+		t.Error("expected flag to be cached in Redis")
+	}
+
+	flagCached, err := repo.GetByID(ctx, id.Hex())
+	if err != nil || flagCached.Name != "flag1" {
+		t.Errorf("expected flag1 from cache, got %v, %v", flagCached, err)
 	}
 }
 
@@ -161,49 +175,34 @@ func TestMongoRedisRepository_Create(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
 
-	flag, err := repo.Create(ctx, models.CreateFlagRequest{
-		Name: "new-flag", 
-		Key: "new-key",
-		Rules: []models.Rule{{ID: bson.NewObjectID(), Type: models.RuleTypePercentage}},
-	})
+	req := models.CreateFlagRequest{Name: "new-flag", Key: "key1"}
+	flag, err := repo.Create(ctx, req)
 	if err != nil || flag.Name != "new-flag" {
-		t.Errorf("failed to create: %v", err)
+		t.Errorf("expected new-flag, got %v, %v", flag, err)
 	}
 	if len(col.flags) != 1 {
-		t.Errorf("expected 1 flag in col, got %d", len(col.flags))
+		t.Errorf("expected 1 flag in DB, got %d", len(col.flags))
 	}
 }
 
-func TestMongoRedisRepository_Update_Full(t *testing.T) {
+func TestMongoRedisRepository_Update(t *testing.T) {
 	ctx := context.Background()
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Name: "old-name"}}}
-	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
+	fakeRdb := &fakeRedis{store: map[string][]byte{"test:"+id.Hex(): []byte(`{"name":"old-name"}`)}}
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
 
 	name := "new-name"
-	key := "new-key"
-	enabled := true
-	desc := "desc"
-	defVal := true
-	rules := []models.Rule{}
-	req := models.UpdateFlagRequest{
-		Name: &name,
-		Key: &key,
-		Enabled: &enabled,
-		Description: &desc,
-		DefaultValue: &defVal,
-		Rules: &rules,
-		UpdatedBy: "user",
+	flag, err := repo.Update(ctx, id.Hex(), models.UpdateFlagRequest{Name: &name})
+	if err != nil || flag.Name != "new-name" {
+		t.Errorf("expected new-name, got %v, %v", flag, err)
 	}
-	flag, err := repo.Update(ctx, id.Hex(), req)
-	if err != nil {
-		t.Errorf("update failed: %v", err)
-	}
-	if flag == nil {
-		t.Error("expected flag, got nil")
+
+	// Cache should be invalidated
+	if _, ok := fakeRdb.store["test:"+id.Hex()]; ok {
+		t.Error("expected cache invalidation after update")
 	}
 }
 
@@ -211,12 +210,17 @@ func TestMongoRedisRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Name: "to-delete"}}}
-	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second)
+	fakeRdb := &fakeRedis{store: map[string][]byte{"test:"+id.Hex(): []byte(`{"name":"to-delete"}`)}}
+	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
 
 	err := repo.Delete(ctx, id.Hex())
 	if err != nil {
-		t.Errorf("delete failed: %v", err)
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	// Cache should be invalidated
+	if _, ok := fakeRdb.store["test:"+id.Hex()]; ok {
+		t.Error("expected cache invalidation after delete")
 	}
 	if len(col.flags) != 0 {
 		t.Errorf("expected 0 flags, got %d", len(col.flags))
@@ -225,7 +229,7 @@ func TestMongoRedisRepository_Delete(t *testing.T) {
 
 func TestMongoRedisRepository_GetByID_Errors(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{store: make(map[string][]byte)}, time.Second)
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{store: make(map[string][]byte)}, time.Second, "test:")
 
 	// Invalid ID
 	_, err := repo.GetByID(ctx, "invalid-hex")
@@ -240,7 +244,7 @@ func TestMongoRedisRepository_GetByID_Errors(t *testing.T) {
 	}
 
 	// Mongo error
-	repoErr := NewMongoRedisRepository(&mockMongoCol{err: errors.New("mongo error")}, &fakeRedis{}, time.Second)
+	repoErr := NewMongoRedisRepository(&mockMongoCol{err: errors.New("mongo error")}, &fakeRedis{}, time.Second, "test:")
 	_, err = repoErr.GetByID(ctx, bson.NewObjectID().Hex())
 	if err == nil || !strings.Contains(err.Error(), "find flag") {
 		t.Errorf("expected find flag error, got %v", err)
@@ -249,7 +253,7 @@ func TestMongoRedisRepository_GetByID_Errors(t *testing.T) {
 
 func TestMongoRedisRepository_Update_Errors(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second)
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second, "test:")
 
 	// Invalid ID
 	_, err := repo.Update(ctx, "invalid-hex", models.UpdateFlagRequest{})
@@ -274,7 +278,7 @@ func TestMongoRedisRepository_Update_Errors(t *testing.T) {
 
 func TestMongoRedisRepository_Delete_Errors(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second)
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second, "test:")
 
 	// Invalid ID
 	err := repo.Delete(ctx, "invalid-hex")
@@ -291,7 +295,7 @@ func TestMongoRedisRepository_Delete_Errors(t *testing.T) {
 
 func TestMongoRedisRepository_List_Error(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{err: errors.New("fail")}, &fakeRedis{}, time.Second)
+	repo := NewMongoRedisRepository(&mockMongoCol{err: errors.New("fail")}, &fakeRedis{}, time.Second, "test:")
 	_, err := repo.List(ctx, 10, 0)
 	if err == nil || !strings.Contains(err.Error(), "find flags") {
 		t.Errorf("expected error, got %v", err)

@@ -53,10 +53,11 @@ func TestEvaluate_NoRules_DefaultTrue(t *testing.T) {
 	if !result.Enabled {
 		t.Error("expected enabled via default")
 	}
-	if result.Reason != "default value" {
+	if result.Reason != "default value (no rules)" {
 		t.Errorf("unexpected reason: %q", result.Reason)
 	}
 }
+
 
 func TestEvaluate_NoRules_DefaultFalse(t *testing.T) {
 	flag := flagWith(nil, false, true)
@@ -459,5 +460,29 @@ func TestEvaluate_Gradual_MissingConfig_NoMatch(t *testing.T) {
 	flag := flagWith([]models.Rule{rule}, false, true)
 	if eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
 		t.Error("expected no match with missing gradual config")
+	}
+}
+
+func TestEvaluate_StrategyAll_Match(t *testing.T) {
+	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
+	rule2 := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
+	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
+	flag.RuleMatchStrategy = models.RuleMatchStrategyAll
+	
+	ctx := models.EvaluationContext{UserID: "user-1", Country: "US"}
+	if !eval.Evaluate(&flag, ctx).Enabled {
+		t.Error("expected match when all rules match")
+	}
+}
+
+func TestEvaluate_StrategyAll_PartialMatch(t *testing.T) {
+	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
+	rule2 := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"CA"}}, true)
+	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
+	flag.RuleMatchStrategy = models.RuleMatchStrategyAll
+	
+	ctx := models.EvaluationContext{UserID: "user-1", Country: "US"}
+	if eval.Evaluate(&flag, ctx).Enabled {
+		t.Error("expected fail when only one rule matches in 'all' strategy")
 	}
 }
