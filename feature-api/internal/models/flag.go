@@ -21,6 +21,7 @@ type Flag struct {
 	Enabled      bool          `bson:"enabled"       json:"enabled"`
 }
 
+// CreateFlagRequest defines the schema for creating a new feature flag.
 type CreateFlagRequest struct {
 	Key          string `json:"key"`
 	Name         string `json:"name"`
@@ -31,6 +32,7 @@ type CreateFlagRequest struct {
 	CreatedBy    string `json:"createdBy"`
 }
 
+// UpdateFlagRequest defines the schema for updating an existing feature flag.
 type UpdateFlagRequest struct {
 	Key          *string `json:"key,omitempty"`
 	Name         *string `json:"name,omitempty"`

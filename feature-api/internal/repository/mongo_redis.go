@@ -19,12 +19,14 @@ const (
 	flagCachePrefix = "flags:id:"
 )
 
+// RedisClient defines the subset of redis.Client methods used by the repository.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
 }
 
+// MongoCollection defines the subset of mongo.Collection methods used by the repository.
 type MongoCollection interface {
 	Find(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOptions]) (*mongo.Cursor, error)
 	FindOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOneOptions]) *mongo.SingleResult
@@ -46,6 +48,7 @@ func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time
 	return &MongoRedisRepository{col: col, rdb: rdb, cacheTTL: cacheTTL}
 }
 
+// List returns a page of feature flags from the database.
 func (r *MongoRedisRepository) List(ctx context.Context, limit, offset int64) ([]models.Flag, error) {
 	opts := options.Find()
 	if limit > 0 {
@@ -69,6 +72,7 @@ func (r *MongoRedisRepository) List(ctx context.Context, limit, offset int64) ([
 	return flags, nil
 }
 
+// GetByID retrieves a single feature flag by its ID, checking cache first.
 func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.Flag, error) {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -97,6 +101,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 	return &flag, nil
 }
 
+// Create inserts a new feature flag into the database.
 func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error) {
 	now := time.Now().UTC()
 	flag := models.Flag{
@@ -123,6 +128,7 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 	return &flag, nil
 }
 
+// Update modifies an existing feature flag and invalidates its cache entry.
 func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models.UpdateFlagRequest) (*models.Flag, error) {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -170,6 +176,7 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	return &flag, nil
 }
 
+// Delete removes a feature flag from the database and invalidates its cache entry.
 func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {

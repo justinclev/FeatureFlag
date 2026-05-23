@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	// embed is used to include the openapi.yaml file in the binary.
 	_ "embed"
 	"net/http"
 )

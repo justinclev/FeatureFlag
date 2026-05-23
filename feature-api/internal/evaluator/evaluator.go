@@ -4,12 +4,15 @@ import (
 	"github.com/featureflags/feature-api/internal/models"
 )
 
+// Evaluator provides logic to determine if a flag is enabled for a given context.
 type Evaluator struct{}
 
+// New creates a new Evaluator.
 func New() *Evaluator {
 	return &Evaluator{}
 }
 
+// Evaluate determines the enabled state of a flag based on its rules and the provided context.
 func (e *Evaluator) Evaluate(flag models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
 	if !flag.Enabled {
 		return models.EvaluationResult{Enabled: false, Reason: "flag disabled"}

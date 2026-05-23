@@ -16,6 +16,7 @@ type Handler struct {
 	evaluator FlagEvaluator
 }
 
+// FlagEvaluator defines the contract for evaluating feature flags.
 type FlagEvaluator interface {
 	Evaluate(flag models.Flag, ctx models.EvaluationContext) models.EvaluationResult
 }
