@@ -7,22 +7,37 @@ import (
 )
 
 func evalScheduleRule(rule models.Rule, now time.Time) (bool, bool) {
-	if rule.Config.EnableAt == nil && rule.Config.DisableAt == nil {
+	if len(rule.Config) == 0 {
 		return false, false
 	}
 
-	// Sanity: if both exist, EnableAt must be before DisableAt
-	if rule.Config.EnableAt != nil && rule.Config.DisableAt != nil {
-		if rule.Config.EnableAt.After(*rule.Config.DisableAt) {
+	eaRaw, ok1 := rule.Config["enableAt"].(string)
+	daRaw, ok2 := rule.Config["disableAt"].(string)
+
+	if !ok1 && !ok2 {
+		return false, false
+	}
+
+	var enableAt, disableAt time.Time
+	if ok1 && eaRaw != "" {
+		enableAt, _ = time.Parse(time.RFC3339, eaRaw)
+	}
+	if ok2 && daRaw != "" {
+		disableAt, _ = time.Parse(time.RFC3339, daRaw)
+	}
+
+	// Sanity
+	if !enableAt.IsZero() && !disableAt.IsZero() {
+		if enableAt.After(disableAt) {
 			return false, false
 		}
 	}
 
-	if rule.Config.EnableAt != nil && now.Before(*rule.Config.EnableAt) {
+	if !enableAt.IsZero() && now.Before(enableAt) {
 		return false, false
 	}
 
-	if rule.Config.DisableAt != nil && now.After(*rule.Config.DisableAt) {
+	if !disableAt.IsZero() && now.After(disableAt) {
 		return false, false
 	}
 

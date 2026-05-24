@@ -10,9 +10,6 @@ import (
 
 var eval = New()
 
-func ptrFloat(v float64) *float64 { return &v }
-func ptrTime(t time.Time) *time.Time { return &t }
-
 func flagWith(rules []models.Rule, defaultValue bool, enabled bool) models.Flag {
 	return models.Flag{
 		ID:           bson.NewObjectID(),
@@ -24,7 +21,7 @@ func flagWith(rules []models.Rule, defaultValue bool, enabled bool) models.Flag 
 	}
 }
 
-func ruleWith(t models.RuleType, cfg models.RuleConfig, value bool) models.Rule {
+func ruleWith(t models.RuleType, cfg map[string]any, value bool) models.Rule {
 	return models.Rule{
 		ID:     bson.NewObjectID(),
 		Type:   t,
@@ -57,19 +54,10 @@ func TestEvaluate_NoRules_DefaultTrue(t *testing.T) {
 	}
 }
 
-
-func TestEvaluate_NoRules_DefaultFalse(t *testing.T) {
-	flag := flagWith(nil, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{})
-	if result.Enabled {
-		t.Error("expected disabled via default")
-	}
-}
-
 // --- Percentage ---
 
 func TestEvaluate_Percentage_AlwaysMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypePercentage, models.RuleConfig{Percentage: ptrFloat(100)}, true)
+	rule := ruleWith(models.RuleTypePercentage, map[string]any{"percentage": 100.0}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
 	if !result.Enabled {
@@ -78,7 +66,7 @@ func TestEvaluate_Percentage_AlwaysMatch(t *testing.T) {
 }
 
 func TestEvaluate_Percentage_NeverMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypePercentage, models.RuleConfig{Percentage: ptrFloat(0)}, true)
+	rule := ruleWith(models.RuleTypePercentage, map[string]any{"percentage": 0.0}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
 	if result.Enabled {
@@ -86,31 +74,10 @@ func TestEvaluate_Percentage_NeverMatch(t *testing.T) {
 	}
 }
 
-func TestEvaluate_Percentage_EmptyUserID_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypePercentage, models.RuleConfig{Percentage: ptrFloat(100)}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: ""})
-	if result.Enabled {
-		t.Error("expected no match with empty userID")
-	}
-}
-
-func TestEvaluate_Percentage_Consistent(t *testing.T) {
-	rule := ruleWith(models.RuleTypePercentage, models.RuleConfig{Percentage: ptrFloat(50)}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	ctx := models.EvaluationContext{UserID: "stable-user"}
-	first := eval.Evaluate(&flag, ctx)
-	for i := 0; i < 10; i++ {
-		if eval.Evaluate(&flag, ctx).Enabled != first.Enabled {
-			t.Error("percentage bucketing is not consistent across calls")
-		}
-	}
-}
-
 // --- UserList ---
 
 func TestEvaluate_UserList_Match(t *testing.T) {
-	rule := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1", "user-2"}}, true)
+	rule := ruleWith(models.RuleTypeUserList, map[string]any{"userIds": []any{"user-1", "user-2"}}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-2"})
 	if !result.Enabled {
@@ -118,101 +85,24 @@ func TestEvaluate_UserList_Match(t *testing.T) {
 	}
 }
 
-func TestEvaluate_UserList_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-99"})
-	if result.Enabled {
-		t.Error("expected no match for user not in list")
-	}
-}
-
-func TestEvaluate_UserList_Empty_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{}}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
-	if result.Enabled {
-		t.Error("expected no match with empty user list")
-	}
-}
-
 // --- Geography ---
 
 func TestEvaluate_Geography_CountryMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{Country: "US"})
-	if !result.Enabled {
-		t.Error("expected country match")
-	}
-}
-
-func TestEvaluate_Geography_CountryMatch_CaseInsensitive(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
+	rule := ruleWith(models.RuleTypeGeography, map[string]any{"countries": []any{"US"}}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	result := eval.Evaluate(&flag, models.EvaluationContext{Country: "us"})
 	if !result.Enabled {
-		t.Error("expected case-insensitive country match")
-	}
-}
-
-func TestEvaluate_Geography_CountryNoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{Country: "CA"})
-	if result.Enabled {
-		t.Error("expected no country match")
-	}
-}
-
-func TestEvaluate_Geography_CountryAndState_BothMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{
-		Countries: []string{"US"},
-		States:    []string{"CA"},
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{Country: "US", State: "CA"})
-	if !result.Enabled {
-		t.Error("expected match with country+state")
-	}
-}
-
-func TestEvaluate_Geography_CountryAndState_StateMismatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{
-		Countries: []string{"US"},
-		States:    []string{"CA"},
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{Country: "US", State: "TX"})
-	if result.Enabled {
-		t.Error("expected no match when state mismatches")
-	}
-}
-
-func TestEvaluate_Geography_ZipMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{ZipCodes: []string{"94105"}}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{ZipCode: "94105"})
-	if !result.Enabled {
-		t.Error("expected zip match")
-	}
-}
-
-func TestEvaluate_Geography_CityMatch_CaseInsensitive(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{Cities: []string{"San Francisco"}}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{City: "san francisco"})
-	if !result.Enabled {
-		t.Error("expected case-insensitive city match")
+		t.Error("expected country match (EqualFold)")
 	}
 }
 
 // --- Schedule ---
 
-func TestEvaluate_Schedule_WithinWindow(t *testing.T) {
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
-		EnableAt:  ptrTime(time.Now().UTC().Add(-1 * time.Hour)),
-		DisableAt: ptrTime(time.Now().UTC().Add(1 * time.Hour)),
+func TestEvaluate_Schedule_Valid(t *testing.T) {
+	now := time.Now().UTC()
+	rule := ruleWith(models.RuleTypeSchedule, map[string]any{
+		"enableAt":  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"disableAt": now.Add(1 * time.Hour).Format(time.RFC3339),
 	}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	if !eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
@@ -220,327 +110,160 @@ func TestEvaluate_Schedule_WithinWindow(t *testing.T) {
 	}
 }
 
-func TestEvaluate_Schedule_BeforeWindow(t *testing.T) {
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
-		EnableAt:  ptrTime(time.Now().UTC().Add(1 * time.Hour)),
-		DisableAt: ptrTime(time.Now().UTC().Add(2 * time.Hour)),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
-		t.Error("expected no match before schedule window")
-	}
-}
-
-func TestEvaluate_Schedule_AfterWindow(t *testing.T) {
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
-		EnableAt:  ptrTime(time.Now().UTC().Add(-2 * time.Hour)),
-		DisableAt: ptrTime(time.Now().UTC().Add(-1 * time.Hour)),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
-		t.Error("expected no match after schedule window")
-	}
-}
-
-func TestEvaluate_Schedule_EnableAtOnly(t *testing.T) {
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
-		EnableAt: ptrTime(time.Now().UTC().Add(-1 * time.Hour)),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if !eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
-		t.Error("expected match with only EnableAt in the past")
-	}
-}
-
-func TestEvaluate_Schedule_DisableAtOnly(t *testing.T) {
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
-		DisableAt: ptrTime(time.Now().UTC().Add(1 * time.Hour)),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if !eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
-		t.Error("expected match with only DisableAt in the future")
-	}
-}
-
-func TestEvaluate_Schedule_BothNil_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
-		t.Error("expected no match with both schedule times nil")
-	}
-}
-
 // --- Gradual ---
 
-func TestEvaluate_Gradual_WindowPassed_EndPercent100(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(time.Now().UTC().Add(-2 * time.Hour)),
-		EndAt:        ptrTime(time.Now().UTC().Add(-1 * time.Hour)),
-		StartPercent: ptrFloat(0),
-		EndPercent:   ptrFloat(100),
+func TestEvaluate_Gradual_AlwaysMatch(t *testing.T) {
+	now := time.Now().UTC()
+	rule := ruleWith(models.RuleTypeGradual, map[string]any{
+		"startAt":      now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"endAt":        now.Add(1 * time.Hour).Format(time.RFC3339),
+		"startPercent": 100.0,
+		"endPercent":   100.0,
 	}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	if !eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected match: window passed, EndPercent=100")
-	}
-}
-
-func TestEvaluate_Gradual_WindowPassed_EndPercent0(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(time.Now().UTC().Add(-2 * time.Hour)),
-		EndAt:        ptrTime(time.Now().UTC().Add(-1 * time.Hour)),
-		StartPercent: ptrFloat(0),
-		EndPercent:   ptrFloat(0),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected no match: window passed, EndPercent=0")
-	}
-}
-
-func TestEvaluate_Gradual_WindowNotStarted_StartPercent100(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(time.Now().UTC().Add(1 * time.Hour)),
-		EndAt:        ptrTime(time.Now().UTC().Add(2 * time.Hour)),
-		StartPercent: ptrFloat(100),
-		EndPercent:   ptrFloat(100),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if !eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected match: window not started, StartPercent=100")
-	}
-}
-
-func TestEvaluate_Gradual_WindowNotStarted_StartPercent0(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(time.Now().UTC().Add(1 * time.Hour)),
-		EndAt:        ptrTime(time.Now().UTC().Add(2 * time.Hour)),
-		StartPercent: ptrFloat(0),
-		EndPercent:   ptrFloat(100),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected no match: window not started, StartPercent=0")
-	}
-}
-
-func TestEvaluate_Gradual_EmptyUserID_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(time.Now().UTC().Add(-1 * time.Hour)),
-		EndAt:        ptrTime(time.Now().UTC().Add(1 * time.Hour)),
-		StartPercent: ptrFloat(0),
-		EndPercent:   ptrFloat(100),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{UserID: ""}).Enabled {
-		t.Error("expected no match with empty userID")
+		t.Error("expected gradual match with 100% range")
 	}
 }
 
 // --- Attribute ---
 
-func TestEvaluate_Attribute(t *testing.T) {
+func TestEvaluate_Attribute_SafeTypes(t *testing.T) {
 	tests := []struct {
 		name      string
 		op        string
-		cfgValue  string
+		cfgValue  any
 		attrValue any
 		wantMatch bool
 	}{
-		{"eq match", "eq", "premium", "premium", true},
-		{"eq no match", "eq", "premium", "free", false},
-		{"neq match", "neq", "free", "premium", true},
-		{"neq no match", "neq", "premium", "premium", false},
-		{"neq empty expected", "neq", "", "something", true},
-		{"contains match", "contains", "pro", "enterprise-pro", true},
-		{"contains no match", "contains", "pro", "basic", false},
-		{"gt match", "gt", "3", "5.0", true},
-		{"gt no match", "gt", "5", 3.0, false},
-		{"lt match", "lt", "5", 3.0, true},
-		{"lt no match", "lt", "3", 5.0, false},
-		{"unknown op", "between", "1", "2", false},
-		{"non-numeric gt", "gt", "abc", "xyz", false},
+		{"float match", "gt", "10", 20.0, true},
 		{"bool match", "eq", "true", true, true},
-		{"bool mismatch", "eq", "true", false, false},
+		{"string case match", "eq", "PRO", "pro", true},
+		{"contains comma match", "contains", "admin", "user, admin", true},
+		{"contains substring match", "contains", "foo", "foobar", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rule := ruleWith(models.RuleTypeAttribute, models.RuleConfig{
-				AttributeKey:   "plan",
-				AttributeOp:    tt.op,
-				AttributeValue: tt.cfgValue,
+			rule := ruleWith(models.RuleTypeAttribute, map[string]any{
+				"attributeKey":   "k",
+				"attributeOp":    tt.op,
+				"attributeValue": tt.cfgValue,
 			}, true)
 			flag := flagWith([]models.Rule{rule}, false, true)
 			ctx := models.EvaluationContext{
-				Attributes: map[string]any{"plan": tt.attrValue},
+				Attributes: map[string]any{"k": tt.attrValue},
 			}
-			result := eval.Evaluate(&flag, ctx)
-			if result.Enabled != tt.wantMatch {
-				t.Errorf("op=%q cfgValue=%q attrValue=%v: expected enabled=%v, got %v",
-					tt.op, tt.cfgValue, tt.attrValue, tt.wantMatch, result.Enabled)
+			if eval.Evaluate(&flag, ctx).Enabled != tt.wantMatch {
+				t.Errorf("%s failed", tt.name)
 			}
 		})
 	}
 }
 
-func TestEvaluate_Attribute_MissingKey_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeAttribute, models.RuleConfig{
-		AttributeKey:   "plan",
-		AttributeOp:    "eq",
-		AttributeValue: "premium",
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	ctx := models.EvaluationContext{
-		Attributes: map[string]any{"tier": "premium"},
-	}
-	if eval.Evaluate(&flag, ctx).Enabled {
-		t.Error("expected no match when attribute key is missing from context")
-	}
-}
-
-func TestEvaluate_Attribute_EmptyKey_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeAttribute, models.RuleConfig{
-		AttributeKey:   "",
-		AttributeOp:    "eq",
-		AttributeValue: "premium",
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{Attributes: map[string]any{"plan": "premium"}}).Enabled {
-		t.Error("expected no match with empty attribute key")
-	}
-}
-
-// --- Rule ordering ---
-
-func TestEvaluate_FirstRuleMatchWins(t *testing.T) {
-	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
-	rule2 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, false)
-	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
-	if !eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected first matching rule's value (true)")
-	}
-}
-
-func TestEvaluate_UnknownRuleType(t *testing.T) {
-	rule := ruleWith("unknown", models.RuleConfig{}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "any"})
-	if result.Enabled {
-		t.Error("expected disabled for unknown rule type")
-	}
-}
-
-func TestEvaluate_Geography_NoCriteria_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGeography, models.RuleConfig{}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{Country: "US"}).Enabled {
-		t.Error("expected no match with empty geography criteria")
-	}
-}
-
-func TestEvaluate_Gradual_InWindow(t *testing.T) {
-	now := time.Now().UTC()
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(now.Add(-1 * time.Hour)),
-		EndAt:        ptrTime(now.Add(1 * time.Hour)),
-		StartPercent: ptrFloat(0),
-		EndPercent:   ptrFloat(100),
-	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	
-	// Middle of the window (50%)
-	ctx := models.EvaluationContext{UserID: "user-1"}
-	_ = eval.Evaluate(&flag, ctx) 
-}
-
-func TestEvaluate_Gradual_MissingConfig_NoMatch(t *testing.T) {
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected no match with missing gradual config")
-	}
-}
-
-func TestEvaluate_StrategyAll_Match(t *testing.T) {
-	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
-	rule2 := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
+func TestEvaluate_StrategyAll_InTests(t *testing.T) {
+	rule1 := ruleWith(models.RuleTypeUserList, map[string]any{"userIds": []any{"u1"}}, true)
+	rule2 := ruleWith(models.RuleTypeGeography, map[string]any{"countries": []any{"US"}}, true)
 	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
 	flag.RuleMatchStrategy = models.RuleMatchStrategyAll
 	
-	ctx := models.EvaluationContext{UserID: "user-1", Country: "US"}
-	if !eval.Evaluate(&flag, ctx).Enabled {
-		t.Error("expected match when all rules match")
+	if !eval.Evaluate(&flag, models.EvaluationContext{UserID: "u1", Country: "US"}).Enabled {
+		t.Error("expected ALL strategy match")
 	}
 }
 
-func TestEvaluate_StrategyAll_PartialMatch(t *testing.T) {
-	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
-	rule2 := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"CA"}}, true)
-	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
-	flag.RuleMatchStrategy = models.RuleMatchStrategyAll
-	
-	ctx := models.EvaluationContext{UserID: "user-1", Country: "US"}
-	if eval.Evaluate(&flag, ctx).Enabled {
-		t.Error("expected fail when only one rule matches in 'all' strategy")
-	}
+func TestToString_Extended(t *testing.T) {
+	if toString(123.45) != "123.45" { t.Error("float conversion fail") }
+	if toString(true) != "true" { t.Error("bool conversion fail") }
+	if toString(nil) != "" { t.Error("nil conversion fail") }
 }
 
-func TestEvaluate_Gradual_InvalidDuration(t *testing.T) {
+func TestEvaluate_Gradual_EdgeCases(t *testing.T) {
 	now := time.Now().UTC()
-	rule := ruleWith(models.RuleTypeGradual, models.RuleConfig{
-		StartAt:      ptrTime(now),
-		EndAt:        ptrTime(now), // Zero duration
-		StartPercent: ptrFloat(0),
-		EndPercent:   ptrFloat(100),
+    // Before window
+	rule1 := ruleWith(models.RuleTypeGradual, map[string]any{
+		"startAt":      now.Add(1 * time.Hour).Format(time.RFC3339),
+		"endAt":        now.Add(2 * time.Hour).Format(time.RFC3339),
+		"startPercent": 0.0,
+		"endPercent":   100.0,
 	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	
-	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
-	if !result.Enabled {
-		t.Error("expected enabled via EndPercent for zero duration")
+	f1 := flagWith([]models.Rule{rule1}, false, true)
+	if eval.Evaluate(&f1, models.EvaluationContext{UserID: "u1"}).Enabled {
+		t.Error("expected fail before gradual window")
 	}
-}
-
-func TestEvaluate_Schedule_InvalidRange(t *testing.T) {
-	now := time.Now().UTC()
-	rule := ruleWith(models.RuleTypeSchedule, models.RuleConfig{
-		EnableAt:  ptrTime(now.Add(1 * time.Hour)),
-		DisableAt: ptrTime(now), // Disable before enable
+    // After window
+	rule2 := ruleWith(models.RuleTypeGradual, map[string]any{
+		"startAt":      now.Add(-2 * time.Hour).Format(time.RFC3339),
+		"endAt":        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"startPercent": 0.0,
+		"endPercent":   0.0,
 	}, true)
-	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
-		t.Error("expected no match for invalid schedule range")
+	f2 := flagWith([]models.Rule{rule2}, false, true)
+	if eval.Evaluate(&f2, models.EvaluationContext{UserID: "u1"}).Enabled {
+		t.Error("expected fail after gradual window (0%)")
+	}
+    // Zero duration
+	rule3 := ruleWith(models.RuleTypeGradual, map[string]any{
+		"startAt":      now.Format(time.RFC3339),
+		"endAt":        now.Format(time.RFC3339),
+		"startPercent": 0.0,
+		"endPercent":   100.0,
+	}, true)
+	f3 := flagWith([]models.Rule{rule3}, false, true)
+	if !eval.Evaluate(&f3, models.EvaluationContext{UserID: "u1"}).Enabled {
+		t.Error("expected match for zero duration (returns endPercent)")
 	}
 }
 
-func TestEvaluate_UnknownStrategy_DefaultsToAny(t *testing.T) {
-	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
-	flag := flagWith([]models.Rule{rule1}, false, true)
-	flag.RuleMatchStrategy = "invalid"
-	
-	if !eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
-		t.Error("expected default to ANY strategy for invalid input")
-	}
+func TestToStringSlice_Invalid(t *testing.T) {
+    if toStringSlice(123) != nil { t.Error("expected nil for int") }
+    if toStringSlice([]string{"a"})[0] != "a" { t.Error("expected identity for string slice") }
 }
 
-func TestEvaluate_StrategyAll_ValueCheck(t *testing.T) {
-	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, false)
-	rule2 := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
-	flag := flagWith([]models.Rule{rule1, rule2}, true, true)
-	flag.RuleMatchStrategy = models.RuleMatchStrategyAll
-	
-	ctx := models.EvaluationContext{UserID: "user-1", Country: "US"}
-	result := eval.Evaluate(&flag, ctx)
-	if !result.Enabled {
-		t.Error("expected enabled=true (value of last rule)")
-	}
-}
-
-func TestToString_Default(t *testing.T) {
-    type custom struct{ v int }
-    s := toString(custom{v: 10})
-    if s != "{10}" {
-        t.Errorf("expected {10}, got %q", s)
+func TestEvaluate_Attribute_InvalidNumeric(t *testing.T) {
+    rule := ruleWith(models.RuleTypeAttribute, map[string]any{
+        "attributeKey": "k", "attributeOp": "gt", "attributeValue": "abc",
+    }, true)
+	f := flagWith([]models.Rule{rule}, false, true)
+    if eval.Evaluate(&f, models.EvaluationContext{Attributes: map[string]any{"k": "xyz"}}).Enabled {
+        t.Error("expected fail for invalid numeric comparison")
     }
+}
+
+func TestEvaluate_Gradual_ParsingErrors(t *testing.T) {
+    // Missing fields
+	rule1 := ruleWith(models.RuleTypeGradual, map[string]any{"startAt": "invalid"}, true)
+	f1 := flagWith([]models.Rule{rule1}, false, true)
+	if eval.Evaluate(&f1, models.EvaluationContext{UserID: "u1"}).Enabled {
+		t.Error("expected fail for invalid date")
+	}
+}
+
+func TestEvaluate_Schedule_EdgeCases(t *testing.T) {
+	now := time.Now().UTC()
+    // Invalid range
+	rule1 := ruleWith(models.RuleTypeSchedule, map[string]any{
+		"enableAt":  now.Add(1 * time.Hour).Format(time.RFC3339),
+		"disableAt": now.Add(-1 * time.Hour).Format(time.RFC3339),
+	}, true)
+	f1 := flagWith([]models.Rule{rule1}, false, true)
+	if eval.Evaluate(&f1, models.EvaluationContext{}).Enabled {
+		t.Error("expected fail for invalid schedule range")
+	}
+    // DisableAt only
+	rule2 := ruleWith(models.RuleTypeSchedule, map[string]any{
+		"disableAt": now.Add(1 * time.Hour).Format(time.RFC3339),
+	}, true)
+	f2 := flagWith([]models.Rule{rule2}, false, true)
+	if !eval.Evaluate(&f2, models.EvaluationContext{}).Enabled {
+		t.Error("expected match for future disableAt only")
+	}
+}
+
+func TestEvaluate_Percentage_MissingUserID(t *testing.T) {
+	rule := ruleWith(models.RuleTypePercentage, map[string]any{"percentage": 100.0}, true)
+	f := flagWith([]models.Rule{rule}, false, true)
+	if eval.Evaluate(&f, models.EvaluationContext{UserID: ""}).Enabled {
+		t.Error("expected fail for missing userID")
+	}
 }

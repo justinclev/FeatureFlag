@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -53,6 +54,13 @@ func (h *Handler) requestCtx(r *http.Request) (context.Context, context.CancelFu
 func (h *Handler) validateID(id string) error {
 	if _, err := bson.ObjectIDFromHex(id); err != nil {
 		return repository.ErrInvalidID
+	}
+	return nil
+}
+
+func (h *Handler) validateKey(key string) error {
+	if len(key) == 0 || len(key) > 64 {
+		return errors.New("invalid key length (must be 1-64 chars)")
 	}
 	return nil
 }

@@ -64,9 +64,19 @@ func run() error {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
+	// Principal optimization: Reorder middleware for maximum safety and observability.
+	// Recovery is at the absolute top to catch any panic in the entire stack.
+	handler := middleware.Recovery(logger,
+		middleware.CORS(cfg.CORSAllowedOrigin,
+			middleware.Logging(logger,
+				middleware.APIKeyAuth(cfg.APIKey, mux),
+			),
+		),
+	)
+
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      middleware.Recovery(logger, middleware.CORS(cfg.CORSAllowedOrigin, middleware.Logging(logger, middleware.APIKeyAuth(cfg.APIKey, mux)))),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,

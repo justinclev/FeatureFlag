@@ -8,31 +8,37 @@ import (
 )
 
 func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bool) {
-	if rule.Config.AttributeKey == "" || rule.Config.AttributeOp == "" {
+	akRaw, ok1 := rule.Config["attributeKey"].(string)
+	aoRaw, ok2 := rule.Config["attributeOp"].(string)
+	avRaw := toString(rule.Config["attributeValue"])
+
+	if !ok1 || !ok2 || akRaw == "" || aoRaw == "" {
 		return false, false
 	}
 
-	rawActual, ok := ctx.Attributes[rule.Config.AttributeKey]
+	rawActual, ok := ctx.Attributes[akRaw]
 	if !ok {
 		return false, false
 	}
 
 	actual := toString(rawActual)
-	expected := rule.Config.AttributeValue
+	expected := avRaw
 	var matched bool
 
-	switch rule.Config.AttributeOp {
+	switch aoRaw {
 	case "eq":
 		matched = strings.EqualFold(actual, expected)
 	case "neq":
 		matched = !strings.EqualFold(actual, expected)
 	case "contains":
-		// Check if expected is in actual (e.g. actual="admin,user", expected="admin")
-		parts := strings.Split(actual, ",")
-		for _, p := range parts {
-			if strings.TrimSpace(p) == expected {
-				matched = true
-				break
+		// Principal optimization: check for delimiter presence before split
+		if strings.Contains(actual, ",") {
+			parts := strings.Split(actual, ",")
+			for _, p := range parts {
+				if strings.TrimSpace(p) == expected {
+					matched = true
+					break
+				}
 			}
 		}
 		if !matched {
@@ -44,7 +50,7 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		if err1 != nil || err2 != nil {
 			return false, false
 		}
-		if rule.Config.AttributeOp == "gt" {
+		if aoRaw == "gt" {
 			matched = actualF > expectedF
 		} else {
 			matched = actualF < expectedF

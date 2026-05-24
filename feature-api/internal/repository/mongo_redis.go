@@ -17,6 +17,10 @@ import (
 	"github.com/featureflags/feature-api/internal/models"
 )
 
+const (
+	keyCachePrefix = "flags:key:"
+)
+
 // RedisClient defines the subset of redis.Client methods used by the repository.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
@@ -49,8 +53,6 @@ type MongoRedisRepository struct {
 // NewMongoRedisRepository constructs a MongoRedisRepository.
 func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration, cachePrefix string) *MongoRedisRepository {
 	// Initialize L1 cache with 1000 items and a 10-second TTL.
-	// This ensures that even in a multi-node environment, stale data in memory
-	// is purged automatically within 10 seconds.
 	l1 := expirable.NewLRU[string, *models.Flag](1000, nil, 10*time.Second)
 	return &MongoRedisRepository{
 		col:         col,
@@ -86,40 +88,48 @@ func (r *MongoRedisRepository) List(ctx context.Context, limit, offset int64) ([
 	return flags, nil
 }
 
-// GetByID retrieves a single feature flag by its ID, checking L1 and L2 cache first.
+// GetByID retrieves a single feature flag by its ID.
 func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.Flag, error) {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, ErrInvalidID
 	}
 
-	// Tier 1: L1 In-Memory LRU (Near Zero Cost)
-	if flag, ok := r.l1.Get(id); ok {
-		// IMPORTANT: Return a clone to prevent external modification 
-		// from poisoning the cache.
+	// For ID lookups, we'll keep it simple for management routes
+	var flag models.Flag
+	if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("find flag: %w", err)
+	}
+	return &flag, nil
+}
+
+// GetByKey retrieves a single feature flag by its unique key, checking L1 and L2 cache first.
+func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*models.Flag, error) {
+	// Tier 1: L1 In-Memory LRU
+	if flag, ok := r.l1.Get(key); ok {
 		return flag.Clone(), nil
 	}
 
-	cacheKey := r.cachePrefix + id
-	// Tier 2: L2 Redis Cache (Network + JSON Overhead)
+	cacheKey := keyCachePrefix + key
+	// Tier 2: L2 Redis Cache
 	if cached, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var flag models.Flag
 		if jsonErr := json.Unmarshal(cached, &flag); jsonErr == nil {
-			r.l1.Add(id, &flag) // Promote to L1
+			r.l1.Add(key, &flag) // Promote to L1
 			return &flag, nil
 		}
 	}
 
-	// Tier 3: Singleflight to DB (Prevents Thundering Herd)
-	val, err, _ := r.sf.Do(id, func() (interface{}, error) {
-		// IMPORTANT: Use context.Background() for the actual work to ensure it
-		// completes even if the original request context is canceled.
-		// Use a separate timeout to prevent hanging.
+	// Tier 3: Singleflight to DB
+	val, err, _ := r.sf.Do(key, func() (interface{}, error) {
 		dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		var flag models.Flag
-		if err := r.col.FindOne(dbCtx, bson.M{"_id": oid}).Decode(&flag); err != nil {
+		if err := r.col.FindOne(dbCtx, bson.M{"key": key}).Decode(&flag); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
 				return nil, ErrNotFound
 			}
@@ -131,7 +141,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 			_ = r.rdb.Set(dbCtx, cacheKey, payload, r.cacheTTL).Err()
 		}
 		// Update L1
-		r.l1.Add(id, &flag)
+		r.l1.Add(key, &flag)
 
 		return &flag, nil
 	})
@@ -139,7 +149,6 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 	if err != nil {
 		return nil, err
 	}
-	// Return a clone from the result too
 	return val.(*models.Flag).Clone(), nil
 }
 
@@ -167,7 +176,7 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 		return nil, fmt.Errorf("insert flag: %w", err)
 	}
 
-	r.invalidate(flag.ID.Hex())
+	r.invalidate(flag.Key)
 	return &flag, nil
 }
 
@@ -176,6 +185,12 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, ErrInvalidID
+	}
+
+	// Get current key to invalidate cache
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
 	}
 
 	fields := bson.M{}
@@ -218,7 +233,10 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 		return nil, fmt.Errorf("update flag: %w", err)
 	}
 
-	r.invalidate(id)
+	r.invalidate(current.Key)
+	if req.Key != nil && *req.Key != current.Key {
+		r.invalidate(*req.Key)
+	}
 	return &flag, nil
 }
 
@@ -229,6 +247,11 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 		return ErrInvalidID
 	}
 
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	result, err := r.col.DeleteOne(ctx, bson.M{"_id": oid})
 	if err != nil {
 		return fmt.Errorf("delete flag: %w", err)
@@ -237,18 +260,16 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 
-	r.invalidate(id)
+	r.invalidate(current.Key)
 	return nil
 }
 
-func (r *MongoRedisRepository) invalidate(id string) {
-	// IMPORTANT: Use context.Background() to ensure invalidation completes
-	// even if the triggering request context is canceled.
+func (r *MongoRedisRepository) invalidate(key string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	r.l1.Remove(id)                                    // Clear L1
-	_ = r.rdb.Del(ctx, r.cachePrefix+id).Err() // Clear L2
+	r.l1.Remove(key)
+	_ = r.rdb.Del(ctx, keyCachePrefix+key).Err()
 }
 
 // Ready verifies that both MongoDB and Redis are reachable.

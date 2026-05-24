@@ -3,6 +3,7 @@ package evaluator
 import (
 	"hash"
 	"hash/fnv"
+	"io"
 	"sync"
 	"time"
 
@@ -19,18 +20,20 @@ func getBucket(flagKey, userID string) float64 {
 	h := fnvPool.Get().(hash.Hash64)
 	defer fnvPool.Put(h)
 	h.Reset()
-	h.Write([]byte(flagKey + ":" + userID))
-	// Use 10000 for 0.01% precision
+	_, _ = io.WriteString(h, flagKey)
+	_, _ = io.WriteString(h, ":")
+	_, _ = io.WriteString(h, userID)
 	return float64(h.Sum64()%10000) / 100.0
 }
 
 func evalPercentageRule(rule models.Rule, flagKey string, ctx models.EvaluationContext) (bool, bool) {
-	if rule.Config.Percentage == nil || ctx.UserID == "" {
+	p, ok := rule.Config["percentage"].(float64)
+	if !ok || ctx.UserID == "" {
 		return false, false
 	}
 
 	bucket := getBucket(flagKey, ctx.UserID)
-	return bucket < *rule.Config.Percentage, rule.Value
+	return bucket < p, rule.Value
 }
 
 func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationContext, now time.Time) (bool, bool) {
@@ -38,23 +41,33 @@ func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationCont
 		return false, false
 	}
 
-	c := rule.Config
-	if c.StartPercent == nil || c.EndPercent == nil || c.StartAt == nil || c.EndAt == nil {
+	sp, ok1 := rule.Config["startPercent"].(float64)
+	ep, ok2 := rule.Config["endPercent"].(float64)
+	saRaw, ok3 := rule.Config["startAt"].(string)
+	eaRaw, ok4 := rule.Config["endAt"].(string)
+
+	if !ok1 || !ok2 || !ok3 || !ok4 {
+		return false, false
+	}
+
+	startAt, err1 := time.Parse(time.RFC3339, saRaw)
+	endAt, err2 := time.Parse(time.RFC3339, eaRaw)
+	if err1 != nil || err2 != nil {
 		return false, false
 	}
 
 	var effectivePercent float64
-	if now.Before(*c.StartAt) {
-		effectivePercent = *c.StartPercent
-	} else if now.After(*c.EndAt) {
-		effectivePercent = *c.EndPercent
+	if now.Before(startAt) {
+		effectivePercent = sp
+	} else if now.After(endAt) {
+		effectivePercent = ep
 	} else {
-		duration := c.EndAt.Sub(*c.StartAt)
+		duration := endAt.Sub(startAt)
 		if duration <= 0 {
-			effectivePercent = *c.EndPercent
+			effectivePercent = ep
 		} else {
-			progress := float64(now.Sub(*c.StartAt)) / float64(duration)
-			effectivePercent = *c.StartPercent + progress*(*c.EndPercent-*c.StartPercent)
+			progress := float64(now.Sub(startAt)) / float64(duration)
+			effectivePercent = sp + progress*(ep-sp)
 		}
 	}
 

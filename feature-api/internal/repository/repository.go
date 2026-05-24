@@ -11,6 +11,7 @@ import (
 type FlagRepository interface {
 	List(ctx context.Context, limit, offset int64) ([]models.Flag, error)
 	GetByID(ctx context.Context, id string) (*models.Flag, error)
+	GetByKey(ctx context.Context, key string) (*models.Flag, error)
 	Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error)
 	Update(ctx context.Context, id string, req models.UpdateFlagRequest) (*models.Flag, error)
 	Delete(ctx context.Context, id string) error

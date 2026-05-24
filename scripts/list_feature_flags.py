@@ -14,19 +14,8 @@ if response.status_code != 200:
 flags = response.json()
 print(f"Found {len(flags)} flags.")
 
-# Step 2: For each flag, call get-by-id endpoint to see full details
-for flag in flags:
-    flag_id = flag.get("id") or flag.get("_id")
-    if not flag_id:
-        print(f"Flag missing id: {flag}")
-        continue
-    
-    get_url = f"{API_URL}/{flag_id}"
-    resp = requests.get(get_url, headers=headers)
-    if resp.status_code == 200:
-        f = resp.json()
-        strategy = f.get("ruleMatchStrategy", "any")
-        num_rules = len(f.get("rules", []))
-        print(f"ID: {flag_id} | Key: {f['key']} | Enabled: {f['enabled']} | Rules: {num_rules} | Strategy: {strategy}")
-    else:
-        print(f"Failed to fetch flag {flag_id}: {resp.status_code} - {resp.text}")
+# Step 2: Display summary info
+for f in flags:
+    strategy = f.get("ruleMatchStrategy", "any")
+    num_rules = len(f.get("rules", []))
+    print(f"Key: {f['key']:<20} | Enabled: {str(f['enabled']):<5} | Rules: {num_rules} | Strategy: {strategy} | ID: {f['id']}")

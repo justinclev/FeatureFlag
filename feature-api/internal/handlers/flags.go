@@ -170,6 +170,9 @@ func validateCreateRequest(req models.CreateFlagRequest) error {
 	if req.Key == "" {
 		return errors.New("key is required")
 	}
+	if len(req.Key) > 64 {
+		return errors.New("key length exceeds 64 chars")
+	}
 	for _, r := range req.Rules {
 		if err := validateRule(r); err != nil {
 			return err
@@ -179,6 +182,9 @@ func validateCreateRequest(req models.CreateFlagRequest) error {
 }
 
 func validateUpdateRequest(req models.UpdateFlagRequest) error {
+	if req.Key != nil && len(*req.Key) > 64 {
+		return errors.New("key length exceeds 64 chars")
+	}
 	if req.Rules != nil {
 		for _, r := range *req.Rules {
 			if err := validateRule(r); err != nil {
@@ -195,25 +201,29 @@ func validateRule(r models.Rule) error {
 	}
 	switch r.Type {
 	case models.RuleTypePercentage:
-		if r.Config.Percentage == nil {
+		v, ok := r.Config["percentage"]
+		if !ok || v == nil {
 			return errors.New("percentage config missing 'percentage'")
 		}
-		p := *r.Config.Percentage
-		if p < 0 || p > 100 {
-			return errors.New("percentage must be between 0 and 100")
+		p, ok := v.(float64)
+		if !ok || p < 0 || p > 100 {
+			return errors.New("percentage must be a number between 0 and 100")
 		}
 	case models.RuleTypeAttribute:
-		if r.Config.AttributeKey == "" || r.Config.AttributeOp == "" {
+		ak, ok1 := r.Config["attributeKey"].(string)
+		ao, ok2 := r.Config["attributeOp"].(string)
+		if !ok1 || !ok2 || ak == "" || ao == "" {
 			return errors.New("attribute config missing 'attributeKey' or 'attributeOp'")
 		}
 	case models.RuleTypeGradual:
 		c := r.Config
-		if c.StartAt == nil || c.EndAt == nil || c.StartPercent == nil || c.EndPercent == nil {
+		if c["startAt"] == nil || c["endAt"] == nil || c["startPercent"] == nil || c["endPercent"] == nil {
 			return errors.New("gradual rollout config missing required fields")
 		}
-		sp, ep := *c.StartPercent, *c.EndPercent
-		if sp < 0 || sp > 100 || ep < 0 || ep > 100 {
-			return errors.New("gradual percentages must be between 0 and 100")
+		sp, ok1 := c["startPercent"].(float64)
+		ep, ok2 := c["endPercent"].(float64)
+		if !ok1 || !ok2 || sp < 0 || sp > 100 || ep < 0 || ep > 100 {
+			return errors.New("gradual percentages must be numbers between 0 and 100")
 		}
 	}
 	return nil

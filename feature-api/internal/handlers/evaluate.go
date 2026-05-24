@@ -16,9 +16,10 @@ var evalCtxPool = sync.Pool{
 }
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := h.validateID(id); err != nil {
-		h.mapRepoError(w, err, "evaluate flag")
+	// Refactor: Evaluation now uses human-readable KEY instead of internal ID.
+	key := r.PathValue("id")
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "flag key is required")
 		return
 	}
 
@@ -54,7 +55,8 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := h.requestCtx(r)
 	defer cancel()
 
-	flag, err := h.repo.GetByID(ctx, id)
+	// Refactor: Call GetByKey instead of GetByID
+	flag, err := h.repo.GetByKey(ctx, key)
 	if err != nil {
 		h.mapRepoError(w, err, "evaluate flag")
 		return

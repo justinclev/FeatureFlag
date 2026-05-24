@@ -5,7 +5,12 @@ import (
 )
 
 func evalUserListRule(rule models.Rule, ctx models.EvaluationContext) (bool, bool) {
-	for _, userID := range rule.Config.UserIDs {
+	userIDs := toStringSlice(rule.Config["userIds"])
+	if len(userIDs) == 0 {
+		return false, false
+	}
+
+	for _, userID := range userIDs {
 		if userID == ctx.UserID {
 			return true, rule.Value
 		}

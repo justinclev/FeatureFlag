@@ -7,7 +7,7 @@ CONCURRENCY=500
 DURATION="60s"
 # --------------
 
-echo "--- BOMBARDIER STRESS TEST ---"
+echo "--- BOMBARDIER STRESS TEST (KEY-BASED) ---"
 
 # 1. Check for bombardier
 if ! command -v bombardier &> /dev/null; then
@@ -16,17 +16,17 @@ if ! command -v bombardier &> /dev/null; then
     export PATH=$PATH:$(go env GOPATH)/bin
 fi
 
-# 2. Get a random enabled flag ID
+# 2. Get a random enabled flag KEY
 echo "Fetching flags..."
 FLAGS=$(curl -s -H "X-API-KEY: $API_KEY" "$API_URL")
-FLAG_ID=$(echo "$FLAGS" | jq -r '[.[] | select(.enabled == true)] | .[0].id')
+FLAG_KEY=$(echo "$FLAGS" | jq -r '[.[] | select(.enabled == true)] | .[0].key')
 
-if [ "$FLAG_ID" == "null" ] || [ -z "$FLAG_ID" ]; then
+if [ "$FLAG_KEY" == "null" ] || [ -z "$FLAG_KEY" ]; then
     echo "No enabled flags found. Please populate DB first."
     exit 1
 fi
 
-echo "Targeting Flag ID: $FLAG_ID"
+echo "Targeting Flag KEY: $FLAG_KEY"
 echo "Concurrency: $CONCURRENCY | Duration: $DURATION"
 echo "-----------------------------------"
 
@@ -35,4 +35,4 @@ bombardier -c "$CONCURRENCY" -d "$DURATION" -m POST \
     -H "X-API-KEY: $API_KEY" \
     -H "Content-Type: application/json" \
     -b '{"userId":"stress-test-user","attributes":{"tier":"gold","source":"bombardier"}}' \
-    "$API_URL/$FLAG_ID/evaluate"
+    "$API_URL/$FLAG_KEY/evaluate"

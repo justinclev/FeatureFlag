@@ -1,16 +1,29 @@
 package models
 
-import "testing"
+import (
+	"testing"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
 
-func TestRuleTypeConstants(t *testing.T) {
-	if RuleTypePercentage != "percentage" || RuleTypeGeography != "geography" {
-		t.Error("rule type constants incorrect")
+func TestRuleClone(t *testing.T) {
+	id := bson.NewObjectID()
+	cfg := map[string]any{"foo": "bar"}
+	r := Rule{
+		ID:     id,
+		Type:   RuleTypeAttribute,
+		Config: cfg,
+		Value:  true,
 	}
-}
 
-func TestRuleConfigStruct(t *testing.T) {
-	cfg := RuleConfig{AttributeKey: "foo", AttributeOp: "eq", AttributeValue: "bar"}
-	if cfg.AttributeKey != "foo" || cfg.AttributeOp != "eq" || cfg.AttributeValue != "bar" {
-		t.Error("rule config fields not set correctly")
+	cloned := r.Clone()
+
+	if cloned.ID != r.ID || cloned.Value != r.Value {
+		t.Error("cloned fields mismatch")
+	}
+	
+	// Test map isolation
+	cloned.Config["foo"] = "baz"
+	if r.Config["foo"] == "baz" {
+		t.Error("original config modified by clone change")
 	}
 }

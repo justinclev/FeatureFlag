@@ -109,8 +109,9 @@ def eval_rule(rule, flag_key, ctx):
             if not any(c.lower() == ctx.get("city", "").lower() for c in cfg["cities"]):
                 return False, False
         if cfg.get("zipCodes"):
-            if ctx.get("zipCode") not in cfg["zipCodes"]:
-                return False, False
+            if any(z.lower() == ctx.get("zipCode", "").lower() for z in cfg["zipCodes"]):
+                return True, val
+            return False, False
         return True, val
 
     elif rtype == "attribute":
@@ -118,12 +119,17 @@ def eval_rule(rule, flag_key, ctx):
         if not attr_key or attr_key not in ctx.get("attributes", {}): return False, False
         ctx_val = ctx["attributes"][attr_key]
         op, cfg_val = cfg.get("attributeOp"), cfg.get("attributeValue")
-        if op == "eq": return (ctx_val.lower() == cfg_val.lower()), val
-        if op == "neq": return (ctx_val.lower() != cfg_val.lower()), val
+        
+        # Principal Tweak: Handle type mismatch safely
+        actual = str(ctx_val).lower()
+        expected = str(cfg_val).lower()
+
+        if op == "eq": return (actual == expected), val
+        if op == "neq": return (actual != expected), val
         if op == "contains":
-            parts = [p.strip() for p in ctx_val.split(",")]
-            if cfg_val in parts: return True, val
-            return (cfg_val.lower() in ctx_val.lower()), val
+            parts = [p.strip().lower() for p in actual.split(",")]
+            if expected in parts: return True, val
+            return (expected in actual), val
         return False, False
 
     return False, False
@@ -179,7 +185,7 @@ def main():
     stats_total = {"passed": 0, "failed": 0}
     stats_types = {}
 
-    print(f"Running 200 tests with ANY/ALL strategy and 0.01 precision...")
+    print(f"Running 200 tests with KEY-BASED evaluation...")
 
     for i in range(200):
         flag = random.choice(flags)
@@ -194,7 +200,8 @@ def main():
         expected_enabled, _ = predict_evaluation(flag, context)
         
         try:
-            eval_url = f"{API_URL}/{flag.get('id') or flag.get('_id')}/evaluate"
+            # Refactor: Evaluation now uses KEY instead of ID
+            eval_url = f"{API_URL}/{flag.get('key')}/evaluate"
             resp = requests.post(eval_url, json=context, headers=HEADERS, timeout=2)
             actual_enabled = resp.json().get("enabled") if resp.status_code == 200 else "ERR"
         except:
@@ -206,7 +213,6 @@ def main():
             stats_types[rtype]["passed"] += 1
         else:
             stats_total["failed"] += 1
-            # print(f"FAIL: Flag {flag['key']} Strategy {flag.get('ruleMatchStrategy')} Expected {expected_enabled} Got {actual_enabled}")
 
     # Summary
     print("\n" + "="*45)

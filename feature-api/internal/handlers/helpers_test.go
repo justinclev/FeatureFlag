@@ -42,6 +42,18 @@ func (m *mockRepo) GetByID(_ context.Context, id string) (*models.Flag, error) {
 	return nil, repository.ErrNotFound
 }
 
+func (m *mockRepo) GetByKey(_ context.Context, key string) (*models.Flag, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	for i, f := range m.flags {
+		if f.Key == key {
+			return &m.flags[i], nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
 func (m *mockRepo) Create(_ context.Context, req models.CreateFlagRequest) (*models.Flag, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -49,6 +61,7 @@ func (m *mockRepo) Create(_ context.Context, req models.CreateFlagRequest) (*mod
 	f := models.Flag{
 		ID:          bson.NewObjectID(),
 		Name:        req.Name,
+		Key:         req.Key,
 		Enabled:     req.Enabled,
 		Description: req.Description,
 	}

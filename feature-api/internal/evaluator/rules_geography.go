@@ -7,13 +7,22 @@ import (
 )
 
 func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bool) {
-	if len(rule.Config.Countries) == 0 && len(rule.Config.States) == 0 && len(rule.Config.ZipCodes) == 0 && len(rule.Config.Cities) == 0 {
+	if len(rule.Config) == 0 {
 		return false, false
 	}
 
-	if len(rule.Config.Countries) > 0 {
+	countries := toStringSlice(rule.Config["countries"])
+	states := toStringSlice(rule.Config["states"])
+	cities := toStringSlice(rule.Config["cities"])
+	zipCodes := toStringSlice(rule.Config["zipCodes"])
+
+	if len(countries) == 0 && len(states) == 0 && len(zipCodes) == 0 && len(cities) == 0 {
+		return false, false
+	}
+
+	if len(countries) > 0 {
 		matched := false
-		for _, country := range rule.Config.Countries {
+		for _, country := range countries {
 			if strings.EqualFold(country, ctx.Country) {
 				matched = true
 				break
@@ -24,9 +33,9 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		}
 	}
 
-	if len(rule.Config.States) > 0 {
+	if len(states) > 0 {
 		matched := false
-		for _, state := range rule.Config.States {
+		for _, state := range states {
 			if strings.EqualFold(state, ctx.State) {
 				matched = true
 				break
@@ -36,9 +45,10 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 			return false, false
 		}
 	}
-	if len(rule.Config.Cities) > 0 {
+
+	if len(cities) > 0 {
 		matched := false
-		for _, city := range rule.Config.Cities {
+		for _, city := range cities {
 			if strings.EqualFold(city, ctx.City) {
 				matched = true
 				break
@@ -49,9 +59,9 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		}
 	}
 
-	if len(rule.Config.ZipCodes) > 0 {
+	if len(zipCodes) > 0 {
 		matched := false
-		for _, zip := range rule.Config.ZipCodes {
+		for _, zip := range zipCodes {
 			if strings.EqualFold(zip, ctx.ZipCode) {
 				matched = true
 				break
@@ -63,4 +73,23 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 	}
 
 	return true, rule.Value
+}
+
+func toStringSlice(v any) []string {
+	if v == nil {
+		return nil
+	}
+	raw, ok := v.([]any)
+	if !ok {
+		// Try string slice if it was already converted
+		if s, ok := v.([]string); ok {
+			return s
+		}
+		return nil
+	}
+	res := make([]string, len(raw))
+	for i, val := range raw {
+		res[i] = toString(val)
+	}
+	return res
 }
