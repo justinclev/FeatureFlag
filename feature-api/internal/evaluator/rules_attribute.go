@@ -1,6 +1,7 @@
 package evaluator
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -12,11 +13,12 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		return false, false
 	}
 
-	actual, ok := ctx.Attributes[rule.Config.AttributeKey]
+	rawActual, ok := ctx.Attributes[rule.Config.AttributeKey]
 	if !ok {
 		return false, false
 	}
 
+	actual := toString(rawActual)
 	expected := rule.Config.AttributeValue
 	var matched bool
 
@@ -27,7 +29,6 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		matched = !strings.EqualFold(actual, expected)
 	case "contains":
 		// Check if expected is in actual (e.g. actual="admin,user", expected="admin")
-		// Or if actual is a comma-separated list
 		parts := strings.Split(actual, ",")
 		for _, p := range parts {
 			if strings.TrimSpace(p) == expected {
@@ -36,7 +37,7 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 			}
 		}
 		if !matched {
-			matched = strings.Contains(actual, expected)
+			matched = strings.Contains(strings.ToLower(actual), strings.ToLower(expected))
 		}
 	case "gt", "lt":
 		actualF, err1 := strconv.ParseFloat(actual, 64)
@@ -58,4 +59,20 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 	}
 
 	return true, rule.Value
+}
+
+func toString(v any) string {
+	switch v := v.(type) {
+	case string:
+		return v
+	case float64:
+		// JSON numbers unmarshal as float64
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(v)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

@@ -372,7 +372,7 @@ func TestEvaluate_Attribute(t *testing.T) {
 			}, true)
 			flag := flagWith([]models.Rule{rule}, false, true)
 			ctx := models.EvaluationContext{
-				Attributes: map[string]string{"plan": tt.attrValue},
+				Attributes: map[string]any{"plan": tt.attrValue},
 			}
 			result := eval.Evaluate(&flag, ctx)
 			if result.Enabled != tt.wantMatch {
@@ -391,7 +391,7 @@ func TestEvaluate_Attribute_MissingKey_NoMatch(t *testing.T) {
 	}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	ctx := models.EvaluationContext{
-		Attributes: map[string]string{"tier": "premium"},
+		Attributes: map[string]any{"tier": "premium"},
 	}
 	if eval.Evaluate(&flag, ctx).Enabled {
 		t.Error("expected no match when attribute key is missing from context")
@@ -405,7 +405,7 @@ func TestEvaluate_Attribute_EmptyKey_NoMatch(t *testing.T) {
 		AttributeValue: "premium",
 	}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
-	if eval.Evaluate(&flag, models.EvaluationContext{Attributes: map[string]string{"plan": "premium"}}).Enabled {
+	if eval.Evaluate(&flag, models.EvaluationContext{Attributes: map[string]any{"plan": "premium"}}).Enabled {
 		t.Error("expected no match with empty attribute key")
 	}
 }

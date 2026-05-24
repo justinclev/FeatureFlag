@@ -27,9 +27,20 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	evalCtx := evalCtxPool.Get().(*models.EvaluationContext)
-	// Clear the struct for reuse
-	*evalCtx = models.EvaluationContext{}
 	defer evalCtxPool.Put(evalCtx)
+
+	// Performance: Manually reset fields to preserve map capacity.
+	// clear() empties the map but keeps the underlying memory allocated.
+	evalCtx.UserID = ""
+	evalCtx.Country = ""
+	evalCtx.State = ""
+	evalCtx.City = ""
+	evalCtx.ZipCode = ""
+	if evalCtx.Attributes == nil {
+		evalCtx.Attributes = make(map[string]any)
+	} else {
+		clear(evalCtx.Attributes)
+	}
 
 	if err := json.Unmarshal(body, evalCtx); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
