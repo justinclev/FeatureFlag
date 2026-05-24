@@ -14,7 +14,7 @@ func TestRecovery_Panic(t *testing.T) {
 		panic("boom")
 	})
 	
-	h := Recovery(logger, next)
+	h := Recovery(logger)(next)
 	
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)

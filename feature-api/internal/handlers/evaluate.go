@@ -29,11 +29,9 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
-	
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "request too large or invalid")
+		writeError(w, http.StatusBadRequest, "request invalid")
 		return
 	}
 

@@ -71,9 +71,27 @@ func (c *ShardedL1Cache) janitor() {
 	for range ticker.C {
 		for i := 0; i < shardCount; i++ {
 			s := c.shards[i]
-			s.Lock()
+			
+			// Collect expired keys under RLock to minimize blocking
+			var expired []string
+			s.RLock()
+			now := time.Now()
 			for k, v := range s.data {
-				if time.Now().After(v.expiresAt) {
+				if now.After(v.expiresAt) {
+					expired = append(expired, k)
+				}
+			}
+			s.RUnlock()
+
+			if len(expired) == 0 {
+				continue
+			}
+
+			// Delete expired keys under Lock
+			s.Lock()
+			for _, k := range expired {
+				// Re-verify expiry under Lock because it might have been updated
+				if v, ok := s.data[k]; ok && time.Now().After(v.expiresAt) {
 					delete(s.data, k)
 				}
 			}
@@ -275,6 +293,12 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 		return nil, err
 	}
 
+	// Double Invalidation Phase 1: Invalidate before DB write
+	r.invalidate(current.Key)
+	if req.Key != nil && *req.Key != current.Key {
+		r.invalidate(*req.Key)
+	}
+
 	fields := bson.M{}
 	if req.Name != nil {
 		fields["name"] = *req.Name
@@ -315,6 +339,7 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 		return nil, fmt.Errorf("update flag: %w", err)
 	}
 
+	// Double Invalidation Phase 2: Invalidate after DB write to catch any race
 	r.invalidate(current.Key)
 	if req.Key != nil && *req.Key != current.Key {
 		r.invalidate(*req.Key)
@@ -334,6 +359,9 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
+	// Double Invalidation Phase 1: Invalidate before DB write
+	r.invalidate(current.Key)
+
 	result, err := r.col.DeleteOne(ctx, bson.M{"_id": oid})
 	if err != nil {
 		return fmt.Errorf("delete flag: %w", err)
@@ -342,6 +370,7 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 
+	// Double Invalidation Phase 2: Invalidate after DB write
 	r.invalidate(current.Key)
 	return nil
 }

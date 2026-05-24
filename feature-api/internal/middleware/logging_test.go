@@ -10,9 +10,10 @@ import (
 
 func TestLogging(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := Logging(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
-	}))
+	})
+	h := Logging(logger)(next)
 	req := httptest.NewRequest("GET", "/", nil)
 	rw := httptest.NewRecorder()
 	h.ServeHTTP(rw, req)

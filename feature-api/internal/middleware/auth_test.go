@@ -17,7 +17,7 @@ func okHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func applyAuth(next http.HandlerFunc) http.Handler {
-	return middleware.APIKeyAuth(testKey, nil, http.HandlerFunc(next))
+	return middleware.APIKeyAuth(testKey, nil)(http.HandlerFunc(next))
 }
 
 func TestAPIKeyAuth_ValidKey(t *testing.T) {
@@ -62,7 +62,7 @@ func TestAPIKeyAuth_WithLogger(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/flags", nil)
     
-    h := middleware.APIKeyAuth(testKey, logger, http.HandlerFunc(okHandler))
+    h := middleware.APIKeyAuth(testKey, logger)(http.HandlerFunc(okHandler))
 	h.ServeHTTP(rr, r)
 
 	if rr.Code != http.StatusUnauthorized {

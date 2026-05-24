@@ -64,13 +64,13 @@ func run() error {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	// Middleware chain: Recovery -> Auth -> CORS -> Logging
-	handler := middleware.Recovery(logger,
-		middleware.APIKeyAuth(cfg.APIKey, logger,
-			middleware.CORS(cfg.CORSAllowedOrigin,
-				middleware.Logging(logger, mux),
-			),
-		),
+	// Middleware chain: Recovery -> BodyLimit -> Auth -> CORS -> Logging
+	handler := middleware.Chain(mux,
+		middleware.Recovery(logger),
+		middleware.BodyLimit(1<<20), // 1MB
+		middleware.APIKeyAuth(cfg.APIKey, logger),
+		middleware.CORS(cfg.CORSAllowedOrigin),
+		middleware.Logging(logger),
 	)
 
 	srv := &http.Server{
@@ -96,13 +96,18 @@ func run() error {
 	<-stop
 	logger.Info("shutting down gracefully")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	// Shutdown HTTP server first to stop receiving new requests
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
-		return err
 	}
+
+	// Now close dependencies using the same shutdown context (polite cleanup)
+	db.Disconnect(mongoClient)
+	cache.Close(redisClient)
+
 	logger.Info("server stopped")
 	return nil
 }
