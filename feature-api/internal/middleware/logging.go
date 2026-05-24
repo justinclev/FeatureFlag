@@ -22,9 +22,9 @@ func (rr *responseRecorder) WriteHeader(status int) {
 // Optimized: Skips logging for the evaluation hot path and checks level before processing.
 func Logging(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Principal optimization: Don't log evaluation hits at high frequency.
-		// Use a simple path check to skip the heavy lifting.
 		path := r.URL.Path
+		
+		// Principal Optimization: Skips standard logging for the high-frequency evaluation path.
 		if strings.HasSuffix(path, "/evaluate") {
 			next.ServeHTTP(w, r)
 			return

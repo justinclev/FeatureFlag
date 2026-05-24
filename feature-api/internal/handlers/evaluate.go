@@ -25,7 +25,8 @@ var (
 )
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("id")
+	// Principal optimization: Renamed to key for semantic accuracy.
+	key := r.PathValue("key")
 	if err := h.validateKey(key); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -35,8 +36,6 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	
 	// Principal Optimization: Use Pooled Buffer for Reading
-	// Note: We use a limited reader to prevent reading more than 32KB if we want zero-alloc,
-	// but for the general case, we'll read the whole body.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "request too large or invalid")

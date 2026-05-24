@@ -44,7 +44,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/flags/{id}", h.getFlag)
 	mux.HandleFunc("PATCH /api/flags/{id}", h.updateFlag)
 	mux.HandleFunc("DELETE /api/flags/{id}", h.deleteFlag)
-	mux.HandleFunc("POST /api/flags/{id}/evaluate", h.evaluateFlag)
+	
+	// Principal optimization: Rename route parameter to {key} for semantic clarity.
+	mux.HandleFunc("POST /api/flags/{key}/evaluate", h.evaluateFlag)
 }
 
 func (h *Handler) requestCtx(r *http.Request) (context.Context, context.CancelFunc) {

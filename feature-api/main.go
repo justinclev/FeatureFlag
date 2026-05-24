@@ -66,10 +66,10 @@ func run() error {
 
 	// Principal optimization: Reorder middleware for maximum safety and observability.
 	// 1. Recovery is at the top to catch any panic.
-	// 2. Auth is next to fail fast before any logging or heavy processing.
+	// 2. Auth is next to fail fast and log unauthorized attempts.
 	// 3. CORS and Logging follow.
 	handler := middleware.Recovery(logger,
-		middleware.APIKeyAuth(cfg.APIKey,
+		middleware.APIKeyAuth(cfg.APIKey, logger,
 			middleware.CORS(cfg.CORSAllowedOrigin,
 				middleware.Logging(logger, mux),
 			),
@@ -77,11 +77,13 @@ func run() error {
 	)
 
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:    ":" + cfg.Port,
+		Handler: handler,
+		// Principal Security: Limit max header size to 1MB to prevent resource exhaustion.
+		MaxHeaderBytes: 1 << 20,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    120 * time.Second,
 	}
 
 	stop := make(chan os.Signal, 1)
