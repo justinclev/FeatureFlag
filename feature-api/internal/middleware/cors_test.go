@@ -19,7 +19,16 @@ func TestCORS(t *testing.T) {
 	rw := httptest.NewRecorder()
 	h.ServeHTTP(rw, req)
 	if rw.Header().Get("Access-Control-Allow-Origin") != allowed {
-		t.Error("CORS header not set correctly")
+		t.Error("CORS header not set correctly for allowed origin")
+	}
+
+	// GET with denied origin
+	req = httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "http://denied.com")
+	rw = httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+	if rw.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Error("CORS header set for denied origin")
 	}
 
 	// OPTIONS (preflight)

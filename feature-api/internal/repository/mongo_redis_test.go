@@ -26,6 +26,7 @@ type mockMongoCol struct {
     findOneErr error
     updateErr  error
     deleteErr  error
+    pingErr    error
 }
 
 func (m *mockMongoCol) Find(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOptions]) (*mongo.Cursor, error) {
@@ -127,7 +128,27 @@ func (m *mockMongoCol) DeleteOne(ctx context.Context, filter interface{}, opts .
 }
 
 func (m *mockMongoCol) Database() *mongo.Database {
-	return nil
+    // Return a real database object with a fake client to test ping
+    client, _ := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017"))
+	return client.Database("test")
+}
+
+func (m *mockMongoCol) CountDocuments(ctx context.Context, filter interface{}, opts ...options.Lister[options.CountOptions]) (int64, error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	f := filter.(bson.M)
+	key, ok := f["key"].(string)
+    if !ok {
+        return 0, nil
+    }
+	var count int64
+	for _, flag := range m.flags {
+		if flag.Key == key {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (m *mockMongoCol) toDocuments() []interface{} {
@@ -142,10 +163,17 @@ func (m *mockMongoCol) toDocuments() []interface{} {
 type fakeRedis struct {
 	store map[string][]byte
 	err   error
+    setErr error
+    getErr error
+    delErr error
 }
 
 func (f *fakeRedis) Get(ctx context.Context, key string) *redis.StringCmd {
 	cmd := redis.NewStringCmd(ctx)
+	if f.getErr != nil {
+		cmd.SetErr(f.getErr)
+		return cmd
+	}
 	if f.err != nil {
 		cmd.SetErr(f.err)
 		return cmd
@@ -160,6 +188,10 @@ func (f *fakeRedis) Get(ctx context.Context, key string) *redis.StringCmd {
 
 func (f *fakeRedis) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
 	cmd := redis.NewStatusCmd(ctx)
+	if f.setErr != nil {
+		cmd.SetErr(f.setErr)
+		return cmd
+	}
 	if f.err != nil {
 		cmd.SetErr(f.err)
 		return cmd
@@ -170,6 +202,10 @@ func (f *fakeRedis) Set(ctx context.Context, key string, value interface{}, expi
 
 func (f *fakeRedis) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 	cmd := redis.NewIntCmd(ctx)
+    if f.delErr != nil {
+        cmd.SetErr(f.delErr)
+        return cmd
+    }
 	for _, k := range keys {
 		delete(f.store, k)
 	}
@@ -263,6 +299,19 @@ func TestMongoRedisRepository_Create(t *testing.T) {
 	}
 	if len(col.flags) != 1 {
 		t.Errorf("expected 1 flag in DB, got %d", len(col.flags))
+	}
+}
+
+func TestMongoRedisRepository_Create_Conflict(t *testing.T) {
+	ctx := context.Background()
+	col := &mockMongoCol{flags: []models.Flag{{Key: "exists"}}}
+	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, "test:")
+
+	req := models.CreateFlagRequest{Key: "exists"}
+	_, err := repo.Create(ctx, req)
+	if !errors.Is(err, ErrAlreadyExists) {
+		t.Errorf("expected ErrAlreadyExists, got %v", err)
 	}
 }
 
@@ -476,6 +525,21 @@ func TestShardedL1Cache_Remove(t *testing.T) {
     }
 }
 
+func TestShardedL1Cache_Cleanup(t *testing.T) {
+    cache := newShardedL1Cache()
+    cache.Set("expired", &models.Flag{Name: "old"}, -1*time.Second)
+    cache.Set("valid", &models.Flag{Name: "new"}, time.Hour)
+    
+    cache.Cleanup()
+    
+    if _, ok := cache.Get("expired"); ok {
+        t.Error("expected expired item to be removed by cleanup")
+    }
+    if _, ok := cache.Get("valid"); !ok {
+        t.Error("expected valid item to stay after cleanup")
+    }
+}
+
 func TestMongoRedisRepository_GetByKey_L1Hit(t *testing.T) {
     ctx := context.Background()
     repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, testLogger, time.Second, "test:")
@@ -533,4 +597,21 @@ func TestMongoRedisRepository_Update_MultipleFields(t *testing.T) {
     if col.flags[0].Name != "new" || !col.flags[0].Enabled {
         t.Error("fields not updated")
     }
+}
+
+func TestMongoRedisRepository_RedisFailures(t *testing.T) {
+    ctx := context.Background()
+    prefix := "test:"
+    col := &mockMongoCol{flags: []models.Flag{{Key: "key", Name: "ok"}}}
+    fakeRdb := &fakeRedis{getErr: errors.New("redis fail"), setErr: errors.New("redis fail")}
+    repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, prefix)
+
+    // GetByKey should still work via DB fallback
+    flag, err := repo.GetByKey(ctx, "key")
+    if err != nil || flag.Name != "ok" {
+        t.Errorf("expected fallback to DB, got %v", err)
+    }
+
+    // Invalidate with Redis error should not panic
+    repo.invalidate("key")
 }

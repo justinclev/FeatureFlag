@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,7 @@ type MongoCollection interface {
 	InsertOne(ctx context.Context, document interface{}, opts ...options.Lister[options.InsertOneOptions]) (*mongo.InsertOneResult, error)
 	FindOneAndUpdate(ctx context.Context, filter interface{}, update interface{}, opts ...options.Lister[options.FindOneAndUpdateOptions]) *mongo.SingleResult
 	DeleteOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error)
+	CountDocuments(ctx context.Context, filter interface{}, opts ...options.Lister[options.CountOptions]) (int64, error)
 	Database() *mongo.Database
 }
 
@@ -70,34 +72,38 @@ func (c *ShardedL1Cache) janitor() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		for i := 0; i < shardCount; i++ {
-			s := c.shards[i]
-			
-			// Collect expired keys under RLock to minimize blocking
-			var expired []string
-			s.RLock()
-			now := time.Now()
-			for k, v := range s.data {
-				if now.After(v.expiresAt) {
-					expired = append(expired, k)
-				}
-			}
-			s.RUnlock()
+		c.Cleanup()
+	}
+}
 
-			if len(expired) == 0 {
-				continue
+func (c *ShardedL1Cache) Cleanup() {
+	for i := 0; i < shardCount; i++ {
+		s := c.shards[i]
+		
+		// Collect expired keys under RLock to minimize blocking
+		var expired []string
+		s.RLock()
+		now := time.Now()
+		for k, v := range s.data {
+			if now.After(v.expiresAt) {
+				expired = append(expired, k)
 			}
-
-			// Delete expired keys under Lock
-			s.Lock()
-			for _, k := range expired {
-				// Re-verify expiry under Lock because it might have been updated
-				if v, ok := s.data[k]; ok && time.Now().After(v.expiresAt) {
-					delete(s.data, k)
-				}
-			}
-			s.Unlock()
 		}
+		s.RUnlock()
+
+		if len(expired) == 0 {
+			continue
+		}
+
+		// Delete expired keys under Lock
+		s.Lock()
+		for _, k := range expired {
+			// Re-verify expiry under Lock because it might have been updated
+			if v, ok := s.data[k]; ok && time.Now().After(v.expiresAt) {
+				delete(s.data, k)
+			}
+		}
+		s.Unlock()
 	}
 }
 
@@ -204,25 +210,28 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 
 // GetByKey retrieves a single feature flag by its unique key, checking caches first.
 func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*models.Flag, error) {
+	// Principal Hardening: Normalize key to ensure consistent lookup.
+	cleanKey := strings.ToLower(strings.TrimSpace(key))
+	
 	// Tier 1: Sharded L1 Cache
-	if flag, ok := r.l1.Get(key); ok {
+	if flag, ok := r.l1.Get(cleanKey); ok {
 		if flag == nil {
 			return nil, ErrNotFound
 		}
 		return flag.Clone(), nil
 	}
 
-	cacheKey := r.cachePrefix + key
+	cacheKey := r.cachePrefix + cleanKey
 
 	// Tier 2: L2 Redis Cache
 	if cached, err := r.rdb.Get(ctx, cacheKey).Result(); err == nil {
 		if cached == negCacheValue {
-			r.l1.Set(key, nil, 1*time.Minute)
+			r.l1.Set(cleanKey, nil, 1*time.Minute)
 			return nil, ErrNotFound
 		}
 		var flag models.Flag
 		if jsonErr := json.Unmarshal([]byte(cached), &flag); jsonErr == nil {
-			r.l1.Set(key, &flag, r.cacheTTL)
+			r.l1.Set(cleanKey, &flag, r.cacheTTL)
 			return &flag, nil
 		}
 	} else if err != redis.Nil {
@@ -230,17 +239,17 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 	}
 
 	// Tier 3: Singleflight to DB
-	ch := r.sf.DoChan(key, func() (interface{}, error) {
+	ch := r.sf.DoChan(cleanKey, func() (interface{}, error) {
 		dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		var flag models.Flag
-		if err := r.col.FindOne(dbCtx, bson.M{"key": key}).Decode(&flag); err != nil {
+		if err := r.col.FindOne(dbCtx, bson.M{"key": cleanKey}).Decode(&flag); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
 				if setErr := r.rdb.Set(dbCtx, cacheKey, negCacheValue, 1*time.Minute).Err(); setErr != nil {
 					r.logger.Warn("redis negative cache set failed", "key", cacheKey, "error", setErr)
 				}
-				r.l1.Set(key, nil, 1*time.Minute)
+				r.l1.Set(cleanKey, nil, 1*time.Minute)
 				return nil, ErrNotFound
 			}
 			return nil, fmt.Errorf("find flag: %w", err)
@@ -251,7 +260,7 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 				r.logger.Warn("redis cache set failed", "key", cacheKey, "error", setErr)
 			}
 		}
-		r.l1.Set(key, &flag, r.cacheTTL)
+		r.l1.Set(cleanKey, &flag, r.cacheTTL)
 
 		return &flag, nil
 	})
@@ -269,11 +278,23 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 
 // Create inserts a new feature flag into the database.
 func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error) {
+	// Principal Hardening: Normalize key and check existence using CountDocuments.
+	// This is the definitive application-level check requested.
+	cleanKey := strings.ToLower(strings.TrimSpace(req.Key))
+	
+	count, err := r.col.CountDocuments(ctx, bson.M{"key": cleanKey})
+	if err != nil {
+		return nil, fmt.Errorf("check key availability: %w", err)
+	}
+	if count > 0 {
+		return nil, ErrAlreadyExists
+	}
+
 	now := time.Now().UTC()
 	flag := models.Flag{
 		ID:                bson.NewObjectID(),
 		Name:              req.Name,
-		Key:               req.Key,
+		Key:               cleanKey,
 		Enabled:           req.Enabled,
 		Description:       req.Description,
 		DefaultValue:      req.DefaultValue,
@@ -288,6 +309,9 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 	}
 
 	if _, err := r.col.InsertOne(ctx, flag); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, ErrAlreadyExists
+		}
 		return nil, fmt.Errorf("insert flag: %w", err)
 	}
 
@@ -309,16 +333,26 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 
 	// Double Invalidation Phase 1: Invalidate before DB write
 	r.invalidate(current.Key)
-	if req.Key != nil && *req.Key != current.Key {
-		r.invalidate(*req.Key)
+	
+	fields := bson.M{}
+	if req.Key != nil {
+		cleanNewKey := strings.ToLower(strings.TrimSpace(*req.Key))
+		if cleanNewKey != current.Key {
+			// Principal Hardening: Prevent key collisions on update.
+			count, err := r.col.CountDocuments(ctx, bson.M{"key": cleanNewKey})
+			if err != nil {
+				return nil, fmt.Errorf("check new key availability: %w", err)
+			}
+			if count > 0 {
+				return nil, ErrAlreadyExists
+			}
+			r.invalidate(cleanNewKey)
+		}
+		fields["key"] = cleanNewKey
 	}
 
-	fields := bson.M{}
 	if req.Name != nil {
 		fields["name"] = *req.Name
-	}
-	if req.Key != nil {
-		fields["key"] = *req.Key
 	}
 	if req.Enabled != nil {
 		fields["enabled"] = *req.Enabled
@@ -347,6 +381,9 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	err = r.col.FindOneAndUpdate(ctx, bson.M{"_id": oid}, bson.M{"$set": fields}, opts).Decode(&flag)
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, ErrAlreadyExists
+		}
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrNotFound
 		}
@@ -355,8 +392,8 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 
 	// Double Invalidation Phase 2: Invalidate after DB write to catch any race
 	r.invalidate(current.Key)
-	if req.Key != nil && *req.Key != current.Key {
-		r.invalidate(*req.Key)
+	if flag.Key != current.Key {
+		r.invalidate(flag.Key)
 	}
 	return &flag, nil
 }
@@ -390,12 +427,15 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *MongoRedisRepository) invalidate(key string) {
+	// Ensure key is clean even for invalidation calls
+	cleanKey := strings.ToLower(strings.TrimSpace(key))
+	
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	r.l1.Remove(key)
-	if err := r.rdb.Del(ctx, r.cachePrefix+key).Err(); err != nil {
-		r.logger.Warn("redis cache invalidate failed", "key", r.cachePrefix+key, "error", err)
+	r.l1.Remove(cleanKey)
+	if err := r.rdb.Del(ctx, r.cachePrefix+cleanKey).Err(); err != nil {
+		r.logger.Warn("redis cache invalidate failed", "key", r.cachePrefix+cleanKey, "error", err)
 	}
 }
 

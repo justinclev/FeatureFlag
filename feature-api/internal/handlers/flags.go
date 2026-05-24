@@ -69,8 +69,7 @@ func (h *Handler) createFlag(w http.ResponseWriter, r *http.Request) {
 
 	flag, err := h.repo.Create(ctx, req)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "create flag", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create flag")
+		h.mapRepoError(w, err, "create flag")
 		return
 	}
 	writeJSON(w, http.StatusCreated, flag)
@@ -147,6 +146,8 @@ func (h *Handler) mapRepoError(w http.ResponseWriter, err error, op string) {
 		writeError(w, http.StatusBadRequest, "invalid id format")
 	case errors.Is(err, repository.ErrNoFields):
 		writeError(w, http.StatusBadRequest, "no fields to update")
+	case errors.Is(err, repository.ErrAlreadyExists):
+		writeError(w, http.StatusConflict, "flag key already exists")
 	default:
 		h.logger.Error(op, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")

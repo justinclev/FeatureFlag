@@ -51,6 +51,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Flag"
+        "409":
+          description: Conflict - Flag key already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
   /api/flags/{id}:
     get:
       summary: Get a flag
