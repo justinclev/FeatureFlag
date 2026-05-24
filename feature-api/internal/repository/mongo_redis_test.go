@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -184,11 +186,13 @@ func (f *fakeRedis) Ping(ctx context.Context) *redis.StatusCmd {
 	return cmd
 }
 
+var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
 func TestMongoRedisRepository_List(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{flags: []models.Flag{{ID: bson.NewObjectID(), Name: "flag1"}}}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, "test:")
 
 	flags, err := repo.List(ctx, 10, 5)
 	if err != nil || len(flags) != 1 || flags[0].Name != "flag1" {
@@ -200,7 +204,7 @@ func TestMongoRedisRepository_List_Empty(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{flags: nil}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, "test:")
 
 	flags, err := repo.List(ctx, 0, 0)
 	if err != nil || len(flags) != 0 {
@@ -213,7 +217,7 @@ func TestMongoRedisRepository_GetByID(t *testing.T) {
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Name: "flag1"}}}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, "test:")
 
 	flag, err := repo.GetByID(ctx, id.Hex())
 	if err != nil || flag.Name != "flag1" {
@@ -227,7 +231,7 @@ func TestMongoRedisRepository_GetByKey(t *testing.T) {
 	prefix := "test:"
 	col := &mockMongoCol{flags: []models.Flag{{ID: bson.NewObjectID(), Key: key, Name: "flag1"}}}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, prefix)
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, prefix)
 
 	// Test cache miss
 	flag, err := repo.GetByKey(ctx, key)
@@ -250,7 +254,7 @@ func TestMongoRedisRepository_Create(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{}
 	fakeRdb := &fakeRedis{store: make(map[string][]byte)}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, "test:")
 
 	req := models.CreateFlagRequest{Name: "new-flag", Key: "key1"}
 	flag, err := repo.Create(ctx, req)
@@ -269,7 +273,7 @@ func TestMongoRedisRepository_Update(t *testing.T) {
 	prefix := "test:"
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Key: key, Name: "old-name"}}}
 	fakeRdb := &fakeRedis{store: map[string][]byte{prefix+key: []byte(`{"name":"old-name","key":"old-key"}`)}}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, prefix)
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, prefix)
 
 	name := "new-name"
 	flag, err := repo.Update(ctx, id.Hex(), models.UpdateFlagRequest{Name: &name})
@@ -290,7 +294,7 @@ func TestMongoRedisRepository_Delete(t *testing.T) {
 	prefix := "test:"
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Key: key, Name: "to-delete"}}}
 	fakeRdb := &fakeRedis{store: map[string][]byte{prefix+key: []byte(`{"name":"to-delete","key":"to-delete"}`)}}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, prefix)
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, prefix)
 
 	err := repo.Delete(ctx, id.Hex())
 	if err != nil {
@@ -308,7 +312,7 @@ func TestMongoRedisRepository_Delete(t *testing.T) {
 
 func TestMongoRedisRepository_GetByID_Errors(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{store: make(map[string][]byte)}, time.Second, "test:")
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{store: make(map[string][]byte)}, testLogger, time.Second, "test:")
 
 	// Invalid ID
 	_, err := repo.GetByID(ctx, "invalid-hex")
@@ -325,7 +329,7 @@ func TestMongoRedisRepository_GetByID_Errors(t *testing.T) {
 
 func TestMongoRedisRepository_Update_Errors(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, testLogger, time.Second, "test:")
 
 	// Invalid ID
 	_, err := repo.Update(ctx, "invalid-hex", models.UpdateFlagRequest{})
@@ -336,7 +340,7 @@ func TestMongoRedisRepository_Update_Errors(t *testing.T) {
 	// No fields
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id}}}
-	repoValid := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	repoValid := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
 	_, err = repoValid.Update(ctx, id.Hex(), models.UpdateFlagRequest{})
 	if !errors.Is(err, ErrNoFields) {
 		t.Errorf("expected ErrNoFields, got %v", err)
@@ -345,7 +349,7 @@ func TestMongoRedisRepository_Update_Errors(t *testing.T) {
 
 func TestMongoRedisRepository_Delete_Errors(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, testLogger, time.Second, "test:")
 
 	// Invalid ID
 	err := repo.Delete(ctx, "invalid-hex")
@@ -363,7 +367,7 @@ func TestMongoRedisRepository_Delete_Errors(t *testing.T) {
 func TestMongoRedisRepository_List_ErrorPath(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{err: errors.New("db error")}
-	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
 	_, err := repo.List(ctx, 10, 0)
 	if err == nil || !strings.Contains(err.Error(), "find flags") {
 		t.Errorf("expected error, got %v", err)
@@ -375,7 +379,7 @@ func TestMongoRedisRepository_GetByKey_UnmarshalFail(t *testing.T) {
 	prefix := "test:"
 	fakeRdb := &fakeRedis{store: map[string][]byte{prefix+"fail": []byte("invalid-json")}}
     col := &mockMongoCol{flags: []models.Flag{{ID: bson.NewObjectID(), Key: "fail", Name: "ok"}}}
-	repo := NewMongoRedisRepository(col, fakeRdb, time.Second, prefix)
+	repo := NewMongoRedisRepository(col, fakeRdb, testLogger, time.Second, prefix)
 
 	flag, err := repo.GetByKey(ctx, "fail")
 	if err != nil || flag.Name != "ok" {
@@ -388,7 +392,7 @@ func TestMongoRedisRepository_GetByKey_NegativeCache(t *testing.T) {
 	prefix := "test:"
     // Redis has the negative cache marker
 	fakeRdb := &fakeRedis{store: map[string][]byte{prefix+"missing": []byte("__404__")}}
-	repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, time.Second, prefix)
+	repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, testLogger, time.Second, prefix)
 
 	_, err := repo.GetByKey(ctx, "missing")
 	if !errors.Is(err, ErrNotFound) {
@@ -399,7 +403,7 @@ func TestMongoRedisRepository_GetByKey_NegativeCache(t *testing.T) {
 func TestMongoRedisRepository_Ready_RedisError(t *testing.T) {
 	ctx := context.Background()
 	fakeRdb := &fakeRedis{err: errors.New("redis fail")}
-	repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, time.Second, "test:")
+	repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, testLogger, time.Second, "test:")
 	err := repo.Ready(ctx)
 	if err == nil || !strings.Contains(err.Error(), "redis not ready") {
 		t.Errorf("expected redis error, got %v", err)
@@ -409,7 +413,7 @@ func TestMongoRedisRepository_Ready_RedisError(t *testing.T) {
 func TestMongoRedisRepository_GetByID_DBError(t *testing.T) {
 	ctx := context.Background()
 	col := &mockMongoCol{err: errors.New("db error")}
-	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
 	_, err := repo.GetByID(ctx, bson.NewObjectID().Hex())
 	if err == nil || !strings.Contains(err.Error(), "find flag") {
 		t.Errorf("expected error, got %v", err)
@@ -420,7 +424,7 @@ func TestMongoRedisRepository_Update_NotFound(t *testing.T) {
 	ctx := context.Background()
 	id := bson.NewObjectID()
 	col := &mockMongoCol{} // empty
-	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
 	name := "new"
 	_, err := repo.Update(ctx, id.Hex(), models.UpdateFlagRequest{Name: &name})
 	if !errors.Is(err, ErrNotFound) {
@@ -432,7 +436,7 @@ func TestMongoRedisRepository_Update_DBError(t *testing.T) {
 	ctx := context.Background()
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id}}, updateErr: errors.New("fail")}
-	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
 	name := "new"
 	_, err := repo.Update(ctx, id.Hex(), models.UpdateFlagRequest{Name: &name})
 	if err == nil || !strings.Contains(err.Error(), "update flag") {
@@ -444,7 +448,7 @@ func TestMongoRedisRepository_Delete_DBError(t *testing.T) {
 	ctx := context.Background()
 	id := bson.NewObjectID()
 	col := &mockMongoCol{flags: []models.Flag{{ID: id}}, deleteErr: errors.New("fail")}
-	repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
 	err := repo.Delete(ctx, id.Hex())
 	if err == nil || !strings.Contains(err.Error(), "delete flag") {
 		t.Errorf("expected delete error, got %v", err)
@@ -474,7 +478,7 @@ func TestShardedL1Cache_Remove(t *testing.T) {
 
 func TestMongoRedisRepository_GetByKey_L1Hit(t *testing.T) {
     ctx := context.Background()
-    repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second, "test:")
+    repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, testLogger, time.Second, "test:")
     flag := &models.Flag{Key: "hit"}
     repo.l1.Set("hit", flag, time.Hour)
     
@@ -487,7 +491,7 @@ func TestMongoRedisRepository_GetByKey_L1Hit(t *testing.T) {
 func TestMongoRedisRepository_GetByKey_DBError(t *testing.T) {
     ctx := context.Background()
     col := &mockMongoCol{err: errors.New("db fail")}
-    repo := NewMongoRedisRepository(col, &fakeRedis{}, time.Second, "test:")
+    repo := NewMongoRedisRepository(col, &fakeRedis{}, testLogger, time.Second, "test:")
     
     _, err := repo.GetByKey(ctx, "key")
     if err == nil || !strings.Contains(err.Error(), "find flag") {
@@ -501,7 +505,7 @@ func TestMongoRedisRepository_GetByKey_L2Hit(t *testing.T) {
     flag := models.Flag{Key: "l2-hit", Name: "L2"}
     payload, _ := json.Marshal(flag)
     fakeRdb := &fakeRedis{store: map[string][]byte{prefix+"l2-hit": payload}}
-    repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, time.Second, prefix)
+    repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, testLogger, time.Second, prefix)
     
     res, err := repo.GetByKey(ctx, "l2-hit")
     if err != nil || res.Name != "L2" {
@@ -518,7 +522,7 @@ func TestMongoRedisRepository_Update_MultipleFields(t *testing.T) {
 	id := bson.NewObjectID()
 	key := "old"
 	col := &mockMongoCol{flags: []models.Flag{{ID: id, Key: key}}}
-	repo := NewMongoRedisRepository(col, &fakeRedis{store: make(map[string][]byte)}, time.Second, "test:")
+	repo := NewMongoRedisRepository(col, &fakeRedis{store: make(map[string][]byte)}, testLogger, time.Second, "test:")
 
 	name := "new"
     enabled := true

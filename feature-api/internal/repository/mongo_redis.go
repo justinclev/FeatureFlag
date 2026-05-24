@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -140,6 +141,7 @@ func (c *ShardedL1Cache) Remove(key string) {
 type MongoRedisRepository struct {
 	col         MongoCollection
 	rdb         RedisClient
+	logger      *slog.Logger
 	cacheTTL    time.Duration
 	cachePrefix string
 	sf          singleflight.Group
@@ -147,10 +149,11 @@ type MongoRedisRepository struct {
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
-func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration, cachePrefix string) *MongoRedisRepository {
+func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, logger *slog.Logger, cacheTTL time.Duration, cachePrefix string) *MongoRedisRepository {
 	return &MongoRedisRepository{
 		col:         col,
 		rdb:         rdb,
+		logger:      logger,
 		cacheTTL:    cacheTTL,
 		cachePrefix: cachePrefix,
 		sf:          singleflight.Group{},
@@ -222,6 +225,8 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 			r.l1.Set(key, &flag, r.cacheTTL)
 			return &flag, nil
 		}
+	} else if err != redis.Nil {
+		r.logger.Warn("redis cache get failed", "key", cacheKey, "error", err)
 	}
 
 	// Tier 3: Singleflight to DB
@@ -232,7 +237,9 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 		var flag models.Flag
 		if err := r.col.FindOne(dbCtx, bson.M{"key": key}).Decode(&flag); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
-				_ = r.rdb.Set(dbCtx, cacheKey, negCacheValue, 1*time.Minute).Err()
+				if setErr := r.rdb.Set(dbCtx, cacheKey, negCacheValue, 1*time.Minute).Err(); setErr != nil {
+					r.logger.Warn("redis negative cache set failed", "key", cacheKey, "error", setErr)
+				}
 				r.l1.Set(key, nil, 1*time.Minute)
 				return nil, ErrNotFound
 			}
@@ -240,7 +247,9 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 		}
 
 		if payload, err := json.Marshal(flag); err == nil {
-			_ = r.rdb.Set(dbCtx, cacheKey, payload, r.cacheTTL).Err()
+			if setErr := r.rdb.Set(dbCtx, cacheKey, payload, r.cacheTTL).Err(); setErr != nil {
+				r.logger.Warn("redis cache set failed", "key", cacheKey, "error", setErr)
+			}
 		}
 		r.l1.Set(key, &flag, r.cacheTTL)
 
@@ -385,7 +394,9 @@ func (r *MongoRedisRepository) invalidate(key string) {
 	defer cancel()
 
 	r.l1.Remove(key)
-	_ = r.rdb.Del(ctx, r.cachePrefix+key).Err()
+	if err := r.rdb.Del(ctx, r.cachePrefix+key).Err(); err != nil {
+		r.logger.Warn("redis cache invalidate failed", "key", r.cachePrefix+key, "error", err)
+	}
 }
 
 // Ready verifies that both MongoDB and Redis are reachable.

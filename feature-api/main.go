@@ -58,7 +58,7 @@ func run() error {
 	defer cache.Close(redisClient)
 
 	eval := evaluator.New()
-	repo := repository.NewMongoRedisRepository(database.Collection(cfg.MongoCollectionName), redisClient, cfg.CacheTTL, cfg.RedisCachePrefix)
+	repo := repository.NewMongoRedisRepository(database.Collection(cfg.MongoCollectionName), redisClient, logger, cfg.CacheTTL, cfg.RedisCachePrefix)
 	h := handlers.New(repo, logger, eval, cfg.RequestTimeout)
 
 	mux := http.NewServeMux()

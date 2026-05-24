@@ -6,12 +6,15 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
 	"github.com/featureflags/feature-api/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
+
+var keyRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
 
 // Handler holds application dependencies and exposes HTTP handler methods.
 type Handler struct {
@@ -61,6 +64,9 @@ func (h *Handler) validateID(id string) error {
 func (h *Handler) validateKey(key string) error {
 	if len(key) == 0 || len(key) > 64 {
 		return errors.New("invalid key length (must be 1-64 chars)")
+	}
+	if !keyRegex.MatchString(key) {
+		return errors.New("invalid key characters (only alphanumeric, _, -, . allowed)")
 	}
 	return nil
 }
