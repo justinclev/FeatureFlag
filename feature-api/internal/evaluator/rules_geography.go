@@ -11,10 +11,10 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		return false, false
 	}
 
-	countries := toStringSlice(rule.Config["countries"])
-	states := toStringSlice(rule.Config["states"])
-	cities := toStringSlice(rule.Config["cities"])
-	zipCodes := toStringSlice(rule.Config["zipCodes"])
+	countries := toStringSlice(getConfig(rule.Config, "countries"))
+	states := toStringSlice(getConfig(rule.Config, "states"))
+	cities := toStringSlice(getConfig(rule.Config, "cities"))
+	zipCodes := toStringSlice(getConfig(rule.Config, "zipCodes"))
 
 	if len(countries) == 0 && len(states) == 0 && len(zipCodes) == 0 && len(cities) == 0 {
 		return false, false

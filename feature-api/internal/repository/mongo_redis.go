@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	keyCachePrefix = "flags:key:v3:"
+	// Principal optimization: Increment cache version to ensure fresh logic is applied.
+	keyCachePrefix = "flags:key:v5:"
 	negCacheValue  = "__404__"
 	shardCount     = 64
 )
@@ -62,7 +63,25 @@ func newShardedL1Cache() *ShardedL1Cache {
 	for i := 0; i < shardCount; i++ {
 		c.shards[i] = &shard{data: make(map[string]cacheItem)}
 	}
+	go c.janitor()
 	return c
+}
+
+func (c *ShardedL1Cache) janitor() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		for i := 0; i < shardCount; i++ {
+			s := c.shards[i]
+			s.Lock()
+			for k, v := range s.data {
+				if time.Now().After(v.expiresAt) {
+					delete(s.data, k)
+				}
+			}
+			s.Unlock()
+		}
+	}
 }
 
 func (c *ShardedL1Cache) getShard(key string) *shard {
@@ -166,7 +185,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 
 // GetByKey retrieves a single feature flag by its unique key, checking L1 and L2 cache first.
 func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*models.Flag, error) {
-	// Tier 1: Sharded L1 Cache (Low Contention)
+	// Tier 1: Sharded L1 Cache
 	if flag, ok := r.l1.Get(key); ok {
 		if flag == nil {
 			return nil, ErrNotFound

@@ -2,36 +2,24 @@ package middleware
 
 import (
 	"crypto/subtle"
-	"encoding/json"
 	"net/http"
 )
 
-// APIKeyAuth protects all routes except /health by requiring a valid X-API-Key header.
-// Returns 401 when the header is absent, 403 when the key is wrong.
-func APIKeyAuth(apiKey string, next http.Handler) http.Handler {
-	keyBytes := []byte(apiKey)
+// APIKeyAuth returns a middleware that validates the "X-API-KEY" header.
+func APIKeyAuth(expectedKey string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			next.ServeHTTP(w, r)
+		key := r.Header.Get("X-API-KEY")
+		
+		// Principal Security: Limit API Key entropy to prevent timing/OOM attacks on the header.
+		if len(key) == 0 || len(key) > 128 {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		got := r.Header.Get("X-API-Key")
-		if got == "" {
-			writeAuthError(w, http.StatusUnauthorized, "missing API key")
+		if subtle.ConstantTimeCompare([]byte(key), []byte(expectedKey)) != 1 {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if subtle.ConstantTimeCompare([]byte(got), keyBytes) != 1 {
-			writeAuthError(w, http.StatusForbidden, "invalid API key")
-			return
-		}
-
 		next.ServeHTTP(w, r)
 	})
-}
-
-func writeAuthError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }

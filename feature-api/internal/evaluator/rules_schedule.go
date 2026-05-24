@@ -11,8 +11,8 @@ func evalScheduleRule(rule models.Rule, now time.Time) (bool, bool) {
 		return false, false
 	}
 
-	enableAt, ok1 := toSafeTime(rule.Config["enableAt"])
-	disableAt, ok2 := toSafeTime(rule.Config["disableAt"])
+	enableAt, ok1 := toSafeTime(getConfig(rule.Config, "enableAt"))
+	disableAt, ok2 := toSafeTime(getConfig(rule.Config, "disableAt"))
 
 	if !ok1 && !ok2 {
 		return false, false

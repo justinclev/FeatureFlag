@@ -8,20 +8,28 @@ import (
 )
 
 func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bool) {
-	akRaw, ok1 := rule.Config["attributeKey"].(string)
-	aoRaw, ok2 := rule.Config["attributeOp"].(string)
-	avRaw := toString(rule.Config["attributeValue"])
+	akRaw, ok1 := getConfig(rule.Config, "attributeKey").(string)
+	aoRaw, ok2 := getConfig(rule.Config, "attributeOp").(string)
+	avRaw := toString(getConfig(rule.Config, "attributeValue"))
 
 	if !ok1 || !ok2 || akRaw == "" || aoRaw == "" {
 		return false, false
 	}
 
-	rawActual, ok := ctx.Attributes[akRaw]
-	if !ok {
+	// Principal optimization: Case-insensitive attribute key lookup
+	var rawActual any
+	found := false
+	for k, v := range ctx.Attributes {
+		if stringsEqualFold(k, akRaw) {
+			rawActual = v
+			found = true
+			break
+		}
+	}
+	if !found {
 		return false, false
 	}
 
-	// Principal refinement: Unified case-insensitive and trimmed comparison.
 	actual := strings.ToLower(strings.TrimSpace(toString(rawActual)))
 	expected := strings.ToLower(strings.TrimSpace(avRaw))
 	var matched bool
@@ -32,11 +40,10 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 	case "neq":
 		matched = (actual != expected)
 	case "contains":
-		// Check for comma-separated list match first (resilient to spacing)
 		if strings.Contains(actual, ",") {
 			parts := strings.Split(actual, ",")
 			for _, p := range parts {
-				if strings.TrimSpace(p) == expected {
+				if strings.ToLower(strings.TrimSpace(p)) == expected {
 					matched = true
 					break
 				}
@@ -48,13 +55,18 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 	case "gt", "lt":
 		actualF, err1 := strconv.ParseFloat(actual, 64)
 		expectedF, err2 := strconv.ParseFloat(expected, 64)
-		if err1 != nil || err2 != nil {
-			return false, false
-		}
-		if aoRaw == "gt" {
-			matched = actualF > expectedF
+		if err1 == nil && err2 == nil {
+			if aoRaw == "gt" {
+				matched = actualF > expectedF
+			} else {
+				matched = actualF < expectedF
+			}
 		} else {
-			matched = actualF < expectedF
+			if aoRaw == "gt" {
+				matched = actual > expected
+			} else {
+				matched = actual < expected
+			}
 		}
 	default:
 		return false, false

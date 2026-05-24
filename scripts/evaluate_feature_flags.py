@@ -33,6 +33,16 @@ def to_string(v):
         return s
     return str(v)
 
+def get_config(cfg, key):
+    """Robust case-insensitive config lookup matching Go's getConfig."""
+    if not cfg: return None
+    if key in cfg: return cfg[key]
+    target = key.lower()
+    for k, v in cfg.items():
+        if k.lower() == target:
+            return v
+    return None
+
 def predict_evaluation(flag, context, server_now=None):
     """Local implementation of evaluation logic matching Go backend exactly."""
     if not flag.get("enabled", True):
@@ -63,16 +73,19 @@ def predict_evaluation(flag, context, server_now=None):
 def eval_rule(rule, flag_key, ctx, server_now=None):
     rtype = rule.get("type")
     cfg = rule.get("config", {})
+    if not cfg: cfg = {}
     val = rule.get("value", False)
     user_id = ctx.get("userId", "")
 
     if rtype == "user_list":
-        # Synchronized logic: Convert all user_ids to strings for comparison
-        uids = [to_string(uid).lower().strip() for uid in cfg.get("userIds", [])]
+        uids_raw = get_config(cfg, "userIds")
+        if uids_raw is None: uids_raw = []
+        if not isinstance(uids_raw, list): uids_raw = [uids_raw]
+        uids = [to_string(uid).lower().strip() for uid in uids_raw]
         return (to_string(user_id).lower().strip() in uids), val
         
     elif rtype == "percentage":
-        p = cfg.get("percentage")
+        p = get_config(cfg, "percentage")
         if p is None or not user_id: return False, False
         bucket = get_bucket(flag_key, user_id)
         return bucket < float(p), val
@@ -80,12 +93,12 @@ def eval_rule(rule, flag_key, ctx, server_now=None):
     elif rtype == "gradual":
         if not user_id: return False, False
         try:
-            start_at = datetime.fromisoformat(cfg["startAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
-            end_at = datetime.fromisoformat(cfg["endAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+            start_at = datetime.fromisoformat(get_config(cfg, "startAt").replace("Z", "+00:00")).astimezone(timezone.utc)
+            end_at = datetime.fromisoformat(get_config(cfg, "endAt").replace("Z", "+00:00")).astimezone(timezone.utc)
             now = server_now if server_now else datetime.now(timezone.utc)
             
-            start_p = float(cfg.get("startPercent", 0))
-            end_p = float(cfg.get("endPercent", 0))
+            start_p = float(get_config(cfg, "startPercent") or 0)
+            end_p = float(get_config(cfg, "endPercent") or 0)
             
             if now < start_at: eff_p = start_p
             elif now > end_at: eff_p = end_p
@@ -103,59 +116,75 @@ def eval_rule(rule, flag_key, ctx, server_now=None):
     elif rtype == "schedule":
         try:
             now = server_now if server_now else datetime.now(timezone.utc)
-            if cfg.get("enableAt"):
-                ea = datetime.fromisoformat(cfg["enableAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+            enable_at_raw = get_config(cfg, "enableAt")
+            disable_at_raw = get_config(cfg, "disableAt")
+            if enable_at_raw:
+                ea = datetime.fromisoformat(enable_at_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
                 if now < ea: return False, False
-            if cfg.get("disableAt"):
-                da = datetime.fromisoformat(cfg["disableAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+            if disable_at_raw:
+                da = datetime.fromisoformat(disable_at_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
                 if now > da: return False, False
             return True, val
         except: return False, False
 
     elif rtype == "geography":
-        if not any([cfg.get("countries"), cfg.get("states"), cfg.get("cities"), cfg.get("zipCodes")]):
+        countries = get_config(cfg, "countries")
+        states = get_config(cfg, "states")
+        cities = get_config(cfg, "cities")
+        zips = get_config(cfg, "zipCodes")
+        if not any([countries, states, cities, zips]):
             return False, False
 
-        if cfg.get("countries"):
-            if not any(c.lower() == ctx.get("country", "").lower() for c in cfg["countries"]):
+        if countries:
+            if not any(c.lower() == ctx.get("country", "").lower().strip() for c in countries):
                 return False, False
-        if cfg.get("states"):
-            if not any(s.lower() == ctx.get("state", "").lower() for s in cfg["states"]):
+        if states:
+            if not any(s.lower() == ctx.get("state", "").lower().strip() for s in states):
                 return False, False
-        if cfg.get("cities"):
-            if not any(c.lower() == ctx.get("city", "").lower() for c in cfg["cities"]):
+        if cities:
+            if not any(c.lower() == ctx.get("city", "").lower().strip() for c in cities):
                 return False, False
-        if cfg.get("zipCodes"):
-            if any(z.lower() == ctx.get("zipCode", "").lower() for z in cfg["zipCodes"]):
+        if zips:
+            if any(z.lower() == ctx.get("zipCode", "").lower().strip() for z in zips):
                 return True, val
             return False, False
         return True, val
 
     elif rtype == "attribute":
-        attr_key = cfg.get("attributeKey")
-        if not attr_key or attr_key not in ctx.get("attributes", {}): return False, False
+        ak_raw = get_config(cfg, "attributeKey")
+        if not ak_raw: return False, False
         
-        ctx_val = ctx["attributes"][attr_key]
-        op = cfg.get("attributeOp")
-        cfg_val = cfg.get("attributeValue")
+        # Case-insensitive attribute key lookup matching Go
+        ctx_val = None
+        for k, v in ctx.get("attributes", {}).items():
+            if k.lower() == ak_raw.lower():
+                ctx_val = v
+                break
         
-        actual = to_string(ctx_val)
-        expected = to_string(cfg_val)
+        if ctx_val is None: return False, False
+        
+        op = get_config(cfg, "attributeOp")
+        cfg_val = get_config(cfg, "attributeValue")
+        
+        actual = to_string(ctx_val).lower().strip()
+        expected = to_string(cfg_val).lower().strip()
 
-        if op == "eq": return (actual.lower().strip() == expected.lower().strip()), val
-        if op == "neq": return (actual.lower().strip() != expected.lower().strip()), val
+        if op == "eq": return (actual == expected), val
+        if op == "neq": return (actual != expected), val
         if op == "contains":
-            actual_l, expected_l = actual.lower().strip(), expected.lower().strip()
             if "," in actual:
                 parts = [p.strip().lower() for p in actual.split(",")]
-                if expected_l in parts: return True, val
-            return (expected_l in actual_l), val
+                if expected in parts: return True, val
+            return (expected in actual), val
         if op in ["gt", "lt"]:
             try:
                 a_f, e_f = float(actual), float(expected)
                 if op == "gt": return a_f > e_f, val
                 return a_f < e_f, val
-            except: return False, False
+            except:
+                # Fallback to string comparison matching Go Principal Refinement
+                if op == "gt": return actual > expected, val
+                return actual < expected, val
         return False, False
 
     return False, False
@@ -178,22 +207,29 @@ def generate_context_for_test(flag, rule, force_match):
         ctx["state"] = "MismatchState"
         return ctx
 
-    if rtype == "user_list" and cfg.get("userIds"):
-        ctx["userId"] = cfg["userIds"][0]
+    if rtype == "user_list":
+        uids = get_config(cfg, "userIds")
+        if uids: ctx["userId"] = uids[0]
     elif rtype == "percentage":
-        target_p = float(cfg.get("percentage", 0))
+        target_p = float(get_config(cfg, "percentage") or 0)
         for i in range(10000):
             uid = f"user-{i}"
             if get_bucket(flag_key, uid) < target_p:
                 ctx["userId"] = uid
                 break
     elif rtype == "geography":
-        if cfg.get("countries"): ctx["country"] = cfg["countries"][0]
-        if cfg.get("states"): ctx["state"] = cfg["states"][0]
-        if cfg.get("cities"): ctx["city"] = cfg["cities"][0]
-        if cfg.get("zipCodes"): ctx["zipCode"] = cfg["zipCodes"][0]
+        c = get_config(cfg, "countries")
+        s = get_config(cfg, "states")
+        ci = get_config(cfg, "cities")
+        z = get_config(cfg, "zipCodes")
+        if c: ctx["country"] = c[0]
+        if s: ctx["state"] = s[0]
+        if ci: ctx["city"] = ci[0]
+        if z: ctx["zipCode"] = z[0]
     elif rtype == "attribute":
-        ctx["attributes"][cfg.get("attributeKey", "plan")] = cfg.get("attributeValue", "pro")
+        ak = get_config(cfg, "attributeKey")
+        av = get_config(cfg, "attributeValue")
+        if ak: ctx["attributes"][ak] = av or "pro"
         
     return ctx
 
@@ -230,24 +266,25 @@ def main():
             if resp.status_code == 200:
                 data = resp.json()
                 actual_enabled = data.get("enabled")
+                actual_reason = data.get("reason")
                 
-                # Principal Sync: Capture server's evaluation time
                 metadata = data.get("metadata", {})
                 server_now_raw = metadata.get("evaluatedAt")
                 server_now = None
                 if server_now_raw:
                     server_now = datetime.fromisoformat(server_now_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
                 
-                # Re-evaluate prediction using server's 'Now'
                 expected_enabled, exp_reason = predict_evaluation(flag, context, server_now)
             else:
                 actual_enabled = "ERR"
                 expected_enabled = "FAIL"
-                actual_reason = f"HTTP {resp.status_code}: {resp.text}"
+                actual_reason = f"HTTP {resp.status_code}"
+                exp_reason = "n/a"
         except Exception as e:
             actual_enabled = "ERR"
             expected_enabled = "FAIL"
             actual_reason = str(e)
+            exp_reason = "n/a"
 
         passed = (actual_enabled == expected_enabled)
         if passed:
@@ -255,7 +292,7 @@ def main():
             stats_types[rtype]["passed"] += 1
         else:
             stats_total["failed"] += 1
-            print(f"FAIL | Key: {flag['key']:<15} | Rule: {rtype:<10} | Exp: {str(expected_enabled):<5} | Act: {str(actual_enabled):<5} | CtxID: {context.get('userId')}")
+            print(f"FAIL | Key: {flag['key']:<15} | Rule: {rtype:<10} | Exp: {str(expected_enabled):<5} | Act: {str(actual_enabled):<5} | ActReason: {actual_reason}")
 
     # Summary
     print("\n" + "="*45)
