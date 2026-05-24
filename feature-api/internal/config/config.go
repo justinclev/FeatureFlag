@@ -20,6 +20,7 @@ type Config struct {
 	CacheTTL            time.Duration
 	APIKey              string
 	LogLevel            string
+	RequestTimeout      time.Duration
 }
 
 // Load reads environment variables, applies defaults, and validates required values.
@@ -36,6 +37,7 @@ func Load() (*Config, error) {
 		CacheTTL:            time.Duration(getEnvInt("CACHE_TTL_SECONDS", 30)) * time.Second,
 		APIKey:              getEnv("API_KEY", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		RequestTimeout:      time.Duration(getEnvInt("REQUEST_TIMEOUT_MS", 5000)) * time.Millisecond,
 	}
 
 	if cfg.MongoURI == "" {

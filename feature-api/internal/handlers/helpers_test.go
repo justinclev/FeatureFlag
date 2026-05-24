@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
 	"github.com/featureflags/feature-api/internal/repository"
@@ -104,7 +105,7 @@ func (m *mockEvaluator) Evaluate(_ *models.Flag, _ models.EvaluationContext) mod
 // newHandler creates a Handler with a quiet logger suitable for tests.
 func newHandler(repo repository.FlagRepository) *Handler {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	return New(repo, logger, &mockEvaluator{})
+	return New(repo, logger, &mockEvaluator{}, 5*time.Second)
 }
 
 // serve registers routes and dispatches a single request, returning the recorder.

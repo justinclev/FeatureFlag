@@ -198,6 +198,10 @@ func validateRule(r models.Rule) error {
 		if r.Config.Percentage == nil {
 			return errors.New("percentage config missing 'percentage'")
 		}
+		p := *r.Config.Percentage
+		if p < 0 || p > 100 {
+			return errors.New("percentage must be between 0 and 100")
+		}
 	case models.RuleTypeAttribute:
 		if r.Config.AttributeKey == "" || r.Config.AttributeOp == "" {
 			return errors.New("attribute config missing 'attributeKey' or 'attributeOp'")
@@ -206,6 +210,10 @@ func validateRule(r models.Rule) error {
 		c := r.Config
 		if c.StartAt == nil || c.EndAt == nil || c.StartPercent == nil || c.EndPercent == nil {
 			return errors.New("gradual rollout config missing required fields")
+		}
+		sp, ep := *c.StartPercent, *c.EndPercent
+		if sp < 0 || sp > 100 || ep < 0 || ep > 100 {
+			return errors.New("gradual percentages must be between 0 and 100")
 		}
 	}
 	return nil

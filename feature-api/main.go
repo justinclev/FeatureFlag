@@ -59,7 +59,7 @@ func run() error {
 
 	eval := evaluator.New()
 	repo := repository.NewMongoRedisRepository(database.Collection(cfg.MongoCollectionName), redisClient, cfg.CacheTTL, cfg.RedisCachePrefix)
-	h := handlers.New(repo, logger, eval)
+	h := handlers.New(repo, logger, eval, cfg.RequestTimeout)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

@@ -339,3 +339,29 @@ func TestDeleteFlag_InvalidIDFormat(t *testing.T) {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
+
+func TestCreateFlag_GradualInvalidPercentages(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	// sp > 100
+	body := `{"name":"n","key":"k","rules":[{"type":"gradual","config":{"startAt":"2026-01-01T00:00:00Z","endAt":"2026-01-02T00:00:00Z","startPercent":150,"endPercent":100}}]}`
+	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_PercentageInvalidBounds(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	// p > 100
+	body := `{"name":"n","key":"k","rules":[{"type":"percentage","config":{"percentage":150}}]}`
+	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for p > 100, got %d", rr.Code)
+	}
+    // p < 0
+    body = `{"name":"n","key":"k","rules":[{"type":"percentage","config":{"percentage":-10}}]}`
+    rr = serve(h, http.MethodPost, "/api/flags", body)
+    if rr.Code != http.StatusBadRequest {
+        t.Errorf("expected 400 for p < 0, got %d", rr.Code)
+    }
+}

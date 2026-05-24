@@ -14,9 +14,10 @@ import (
 
 // Handler holds application dependencies and exposes HTTP handler methods.
 type Handler struct {
-	repo      repository.FlagRepository
-	logger    *slog.Logger
-	evaluator FlagEvaluator
+	repo           repository.FlagRepository
+	logger         *slog.Logger
+	evaluator      FlagEvaluator
+	requestTimeout time.Duration
 }
 
 // FlagEvaluator defines the contract for evaluating feature flags.
@@ -25,8 +26,13 @@ type FlagEvaluator interface {
 }
 
 // New constructs a Handler with the provided dependencies.
-func New(repo repository.FlagRepository, logger *slog.Logger, evaluator FlagEvaluator) *Handler {
-	return &Handler{repo: repo, logger: logger, evaluator: evaluator}
+func New(repo repository.FlagRepository, logger *slog.Logger, evaluator FlagEvaluator, timeout time.Duration) *Handler {
+	return &Handler{
+		repo:           repo,
+		logger:         logger,
+		evaluator:      evaluator,
+		requestTimeout: timeout,
+	}
 }
 
 // RegisterRoutes registers all application routes on mux.
@@ -41,7 +47,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) requestCtx(r *http.Request) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(r.Context(), 10*time.Second)
+	return context.WithTimeout(r.Context(), h.requestTimeout)
 }
 
 func (h *Handler) validateID(id string) error {
