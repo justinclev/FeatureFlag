@@ -105,14 +105,14 @@ paths:
       responses:
         "204":
           description: Deleted
-  /api/flags/{id}/evaluate:
+  /api/flags/{key}/evaluate:
     post:
       summary: Evaluate a flag
       security:
         - ApiKeyAuth: []
       parameters:
         - in: path
-          name: id
+          name: key
           required: true
           schema:
             type: string
@@ -134,7 +134,7 @@ components:
     ApiKeyAuth:
       type: apiKey
       in: header
-      name: X-API-Key
+      name: X-API-KEY
   schemas:
     Flag:
       type: object

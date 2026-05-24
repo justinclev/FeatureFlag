@@ -33,6 +33,10 @@ func (h *Handler) listFlags(w http.ResponseWriter, r *http.Request) {
 	if limit > 100 {
 		limit = 100
 	}
+	// Security: Cap offset to prevent deep DB scan death
+	if offset > 1000 {
+		offset = 1000
+	}
 
 	flags, err := h.repo.List(ctx, limit, offset)
 	if err != nil {

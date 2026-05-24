@@ -225,7 +225,7 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 	}
 
 	// Tier 3: Singleflight to DB
-	val, err, _ := r.sf.Do(key, func() (interface{}, error) {
+	ch := r.sf.DoChan(key, func() (interface{}, error) {
 		dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -247,10 +247,15 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 		return &flag, nil
 	})
 
-	if err != nil {
-		return nil, err
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		return res.Val.(*models.Flag).Clone(), nil
 	}
-	return val.(*models.Flag).Clone(), nil
 }
 
 // Create inserts a new feature flag into the database.

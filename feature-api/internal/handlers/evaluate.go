@@ -12,7 +12,7 @@ import (
 var (
 	evalCtxPool = sync.Pool{
 		New: func() any {
-			return &models.EvaluationContext{}
+			return new(models.EvaluationContext)
 		},
 	}
 	bufferPool = sync.Pool{
@@ -36,19 +36,9 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	evalCtx := evalCtxPool.Get().(*models.EvaluationContext)
+	// Zero out the entire struct safely to prevent cross-request leakage
+	*evalCtx = models.EvaluationContext{}
 	defer evalCtxPool.Put(evalCtx)
-
-	// Reset context for reuse
-	evalCtx.UserID = ""
-	evalCtx.Country = ""
-	evalCtx.State = ""
-	evalCtx.City = ""
-	evalCtx.ZipCode = ""
-	if evalCtx.Attributes == nil {
-		evalCtx.Attributes = make(map[string]any)
-	} else {
-		clear(evalCtx.Attributes)
-	}
 
 	if err := json.Unmarshal(body, evalCtx); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

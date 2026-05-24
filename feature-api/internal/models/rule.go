@@ -2,6 +2,7 @@ package models
 
 import (
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"reflect"
 )
 
 // Rule defines a specific condition and its resulting value for flag evaluation.
@@ -25,14 +26,42 @@ const (
 	RuleTypeAttribute  RuleType = "attribute"
 )
 
-// Clone returns a deep copy of the Rule.
+// Clone returns a deep copy of the Rule to prevent concurrent mutation of cached slices.
 func (r Rule) Clone() Rule {
 	newRule := r
 	if r.Config != nil {
-		newRule.Config = make(map[string]any)
+		newRule.Config = make(map[string]any, len(r.Config))
 		for k, v := range r.Config {
-			newRule.Config[k] = v // Shallow copy of values is fine for primitives/strings
+			newRule.Config[k] = deepCopyValue(v)
 		}
 	}
 	return newRule
+}
+
+func deepCopyValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice:
+		if rv.IsNil() {
+			return nil
+		}
+		newSlice := reflect.MakeSlice(rv.Type(), rv.Len(), rv.Cap())
+		reflect.Copy(newSlice, rv)
+		return newSlice.Interface()
+	case reflect.Map:
+		if rv.IsNil() {
+			return nil
+		}
+		newMap := reflect.MakeMap(rv.Type())
+		for _, key := range rv.MapKeys() {
+			newMap.SetMapIndex(key, reflect.ValueOf(deepCopyValue(rv.MapIndex(key).Interface())))
+		}
+		return newMap.Interface()
+	default:
+		// Primitives and strings are safe to shallow copy
+		return v
+	}
 }
