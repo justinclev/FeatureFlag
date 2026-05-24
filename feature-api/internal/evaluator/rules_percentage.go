@@ -27,7 +27,7 @@ func getBucket(flagKey, userID string) float64 {
 }
 
 func evalPercentageRule(rule models.Rule, flagKey string, ctx models.EvaluationContext) (bool, bool) {
-	p, ok := rule.Config["percentage"].(float64)
+	p, ok := toSafeFloat(rule.Config["percentage"])
 	if !ok || ctx.UserID == "" {
 		return false, false
 	}
@@ -41,8 +41,8 @@ func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationCont
 		return false, false
 	}
 
-	sp, ok1 := rule.Config["startPercent"].(float64)
-	ep, ok2 := rule.Config["endPercent"].(float64)
+	sp, ok1 := toSafeFloat(rule.Config["startPercent"])
+	ep, ok2 := toSafeFloat(rule.Config["endPercent"])
 	saRaw, ok3 := rule.Config["startAt"].(string)
 	eaRaw, ok4 := rule.Config["endAt"].(string)
 

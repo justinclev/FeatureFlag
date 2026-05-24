@@ -74,22 +74,3 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 
 	return true, rule.Value
 }
-
-func toStringSlice(v any) []string {
-	if v == nil {
-		return nil
-	}
-	raw, ok := v.([]any)
-	if !ok {
-		// Try string slice if it was already converted
-		if s, ok := v.([]string); ok {
-			return s
-		}
-		return nil
-	}
-	res := make([]string, len(raw))
-	for i, val := range raw {
-		res[i] = toString(val)
-	}
-	return res
-}
