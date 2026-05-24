@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"strings"
+
 	"github.com/featureflags/feature-api/internal/models"
 )
 
@@ -10,8 +12,11 @@ func evalUserListRule(rule models.Rule, ctx models.EvaluationContext) (bool, boo
 		return false, false
 	}
 
+	// Principal optimization: Case-insensitive and trimmed comparison for resilient matching.
+	actualUserID := strings.ToLower(strings.TrimSpace(ctx.UserID))
+
 	for _, userID := range userIDs {
-		if userID == ctx.UserID {
+		if strings.ToLower(strings.TrimSpace(userID)) == actualUserID {
 			return true, rule.Value
 		}
 	}

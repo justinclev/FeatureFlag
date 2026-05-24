@@ -21,17 +21,18 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 		return false, false
 	}
 
-	actual := toString(rawActual)
-	expected := avRaw
+	// Principal refinement: Unified case-insensitive and trimmed comparison.
+	actual := strings.ToLower(strings.TrimSpace(toString(rawActual)))
+	expected := strings.ToLower(strings.TrimSpace(avRaw))
 	var matched bool
 
 	switch aoRaw {
 	case "eq":
-		matched = strings.EqualFold(actual, expected)
+		matched = (actual == expected)
 	case "neq":
-		matched = !strings.EqualFold(actual, expected)
+		matched = (actual != expected)
 	case "contains":
-		// Principal optimization: check for delimiter presence before split
+		// Check for comma-separated list match first (resilient to spacing)
 		if strings.Contains(actual, ",") {
 			parts := strings.Split(actual, ",")
 			for _, p := range parts {
@@ -42,7 +43,7 @@ func evalAttributeRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 			}
 		}
 		if !matched {
-			matched = strings.Contains(strings.ToLower(actual), strings.ToLower(expected))
+			matched = strings.Contains(actual, expected)
 		}
 	case "gt", "lt":
 		actualF, err1 := strconv.ParseFloat(actual, 64)

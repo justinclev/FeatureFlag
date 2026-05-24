@@ -3,7 +3,7 @@ import random
 import json
 import time
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 API_URL = "http://localhost:8081/api/flags"
 API_KEY = "test-api-key"
@@ -24,7 +24,16 @@ def get_bucket(flag_key, user_id):
     h = fnv1a_64(f"{flag_key}:{user_id}")
     return (h % 10000) / 100.0
 
-def predict_evaluation(flag, context):
+def to_string(v):
+    """Matches Go backend's toString(v any) logic exactly."""
+    if v is None: return ""
+    if isinstance(v, bool): return str(v).lower()
+    if isinstance(v, (int, float)):
+        s = f"{v:g}"
+        return s
+    return str(v)
+
+def predict_evaluation(flag, context, server_now=None):
     """Local implementation of evaluation logic matching Go backend exactly."""
     if not flag.get("enabled", True):
         return False, "flag disabled"
@@ -38,7 +47,7 @@ def predict_evaluation(flag, context):
     if strategy == "all":
         last_value = False
         for rule in rules:
-            matched, value = eval_rule(rule, flag.get("key"), context)
+            matched, value = eval_rule(rule, flag.get("key"), context, server_now)
             if not matched:
                 return flag.get("defaultValue", False), f"failed rule: {rule.get('type')}"
             last_value = value
@@ -46,32 +55,38 @@ def predict_evaluation(flag, context):
     else:
         # Default: ANY
         for rule in rules:
-            matched, value = eval_rule(rule, flag.get("key"), context)
+            matched, value = eval_rule(rule, flag.get("key"), context, server_now)
             if matched:
                 return value, f"matched rule: {rule.get('type')}"
         return flag.get("defaultValue", False), "default value"
 
-def eval_rule(rule, flag_key, ctx):
+def eval_rule(rule, flag_key, ctx, server_now=None):
     rtype = rule.get("type")
     cfg = rule.get("config", {})
     val = rule.get("value", False)
     user_id = ctx.get("userId", "")
 
     if rtype == "user_list":
-        return (user_id in cfg.get("userIds", [])), val
+        # Synchronized logic: Convert all user_ids to strings for comparison
+        uids = [to_string(uid).lower().strip() for uid in cfg.get("userIds", [])]
+        return (to_string(user_id).lower().strip() in uids), val
         
     elif rtype == "percentage":
-        if not cfg.get("percentage") or not user_id: return False, False
+        p = cfg.get("percentage")
+        if p is None or not user_id: return False, False
         bucket = get_bucket(flag_key, user_id)
-        return bucket < cfg["percentage"], val
+        return bucket < float(p), val
 
     elif rtype == "gradual":
         if not user_id: return False, False
         try:
-            start_at = datetime.fromisoformat(cfg["startAt"].replace("Z", "+00:00"))
-            end_at = datetime.fromisoformat(cfg["endAt"].replace("Z", "+00:00"))
-            now = datetime.now().astimezone()
-            start_p, end_p = cfg.get("startPercent", 0), cfg.get("endPercent", 0)
+            start_at = datetime.fromisoformat(cfg["startAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+            end_at = datetime.fromisoformat(cfg["endAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+            now = server_now if server_now else datetime.now(timezone.utc)
+            
+            start_p = float(cfg.get("startPercent", 0))
+            end_p = float(cfg.get("endPercent", 0))
+            
             if now < start_at: eff_p = start_p
             elif now > end_at: eff_p = end_p
             else:
@@ -87,11 +102,13 @@ def eval_rule(rule, flag_key, ctx):
 
     elif rtype == "schedule":
         try:
-            now = datetime.now().astimezone()
+            now = server_now if server_now else datetime.now(timezone.utc)
             if cfg.get("enableAt"):
-                if now < datetime.fromisoformat(cfg["enableAt"].replace("Z", "+00:00")): return False, False
+                ea = datetime.fromisoformat(cfg["enableAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+                if now < ea: return False, False
             if cfg.get("disableAt"):
-                if now > datetime.fromisoformat(cfg["disableAt"].replace("Z", "+00:00")): return False, False
+                da = datetime.fromisoformat(cfg["disableAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+                if now > da: return False, False
             return True, val
         except: return False, False
 
@@ -117,19 +134,28 @@ def eval_rule(rule, flag_key, ctx):
     elif rtype == "attribute":
         attr_key = cfg.get("attributeKey")
         if not attr_key or attr_key not in ctx.get("attributes", {}): return False, False
-        ctx_val = ctx["attributes"][attr_key]
-        op, cfg_val = cfg.get("attributeOp"), cfg.get("attributeValue")
         
-        # Principal Tweak: Handle type mismatch safely
-        actual = str(ctx_val).lower()
-        expected = str(cfg_val).lower()
+        ctx_val = ctx["attributes"][attr_key]
+        op = cfg.get("attributeOp")
+        cfg_val = cfg.get("attributeValue")
+        
+        actual = to_string(ctx_val)
+        expected = to_string(cfg_val)
 
-        if op == "eq": return (actual == expected), val
-        if op == "neq": return (actual != expected), val
+        if op == "eq": return (actual.lower().strip() == expected.lower().strip()), val
+        if op == "neq": return (actual.lower().strip() != expected.lower().strip()), val
         if op == "contains":
-            parts = [p.strip().lower() for p in actual.split(",")]
-            if expected in parts: return True, val
-            return (expected in actual), val
+            actual_l, expected_l = actual.lower().strip(), expected.lower().strip()
+            if "," in actual:
+                parts = [p.strip().lower() for p in actual.split(",")]
+                if expected_l in parts: return True, val
+            return (expected_l in actual_l), val
+        if op in ["gt", "lt"]:
+            try:
+                a_f, e_f = float(actual), float(expected)
+                if op == "gt": return a_f > e_f, val
+                return a_f < e_f, val
+            except: return False, False
         return False, False
 
     return False, False
@@ -155,7 +181,7 @@ def generate_context_for_test(flag, rule, force_match):
     if rtype == "user_list" and cfg.get("userIds"):
         ctx["userId"] = cfg["userIds"][0]
     elif rtype == "percentage":
-        target_p = cfg.get("percentage", 0)
+        target_p = float(cfg.get("percentage", 0))
         for i in range(10000):
             uid = f"user-{i}"
             if get_bucket(flag_key, uid) < target_p:
@@ -197,15 +223,31 @@ def main():
         stats_types[rtype]["total"] += 1
 
         context = generate_context_for_test(flag, target_rule, random.choice([True, False]))
-        expected_enabled, _ = predict_evaluation(flag, context)
         
         try:
-            # Refactor: Evaluation now uses KEY instead of ID
             eval_url = f"{API_URL}/{flag.get('key')}/evaluate"
             resp = requests.post(eval_url, json=context, headers=HEADERS, timeout=2)
-            actual_enabled = resp.json().get("enabled") if resp.status_code == 200 else "ERR"
-        except:
+            if resp.status_code == 200:
+                data = resp.json()
+                actual_enabled = data.get("enabled")
+                
+                # Principal Sync: Capture server's evaluation time
+                metadata = data.get("metadata", {})
+                server_now_raw = metadata.get("evaluatedAt")
+                server_now = None
+                if server_now_raw:
+                    server_now = datetime.fromisoformat(server_now_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+                
+                # Re-evaluate prediction using server's 'Now'
+                expected_enabled, exp_reason = predict_evaluation(flag, context, server_now)
+            else:
+                actual_enabled = "ERR"
+                expected_enabled = "FAIL"
+                actual_reason = f"HTTP {resp.status_code}: {resp.text}"
+        except Exception as e:
             actual_enabled = "ERR"
+            expected_enabled = "FAIL"
+            actual_reason = str(e)
 
         passed = (actual_enabled == expected_enabled)
         if passed:
@@ -213,6 +255,7 @@ def main():
             stats_types[rtype]["passed"] += 1
         else:
             stats_total["failed"] += 1
+            print(f"FAIL | Key: {flag['key']:<15} | Rule: {rtype:<10} | Exp: {str(expected_enabled):<5} | Act: {str(actual_enabled):<5} | CtxID: {context.get('userId')}")
 
     # Summary
     print("\n" + "="*45)
@@ -222,7 +265,7 @@ def main():
         perc = (s['passed']/s['total'])*100 if s['total'] > 0 else 0
         print(f"{rt:<15} | {s['passed']:<6} | {s['total']:<6} | {perc:.1f}%")
     print("="*45)
-    print(f"TOTAL: {stats_total['passed']}/200 ({(stats_total['passed']/200)*100:.1f}%)")
+    print(f"TOTAL: {stats_total['passed']}/200 ({(stats_total['passed']/200)*100:.1f}%)\n")
 
 if __name__ == "__main__":
     main()

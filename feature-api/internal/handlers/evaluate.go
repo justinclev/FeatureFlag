@@ -9,21 +9,28 @@ import (
 	"github.com/featureflags/feature-api/internal/models"
 )
 
-var evalCtxPool = sync.Pool{
-	New: func() any {
-		return &models.EvaluationContext{}
-	},
-}
+var (
+	evalCtxPool = sync.Pool{
+		New: func() any {
+			return &models.EvaluationContext{}
+		},
+	}
+	// Principal optimization: Pool byte buffers to reduce GC pressure
+	bufferPool = sync.Pool{
+		New: func() any {
+			return make([]byte, 1024) // Initial 1KB buffer
+		},
+	}
+)
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
-	// Refactor: Evaluation now uses human-readable KEY instead of internal ID.
 	key := r.PathValue("id")
-	if key == "" {
-		writeError(w, http.StatusBadRequest, "flag key is required")
+	if err := h.validateKey(key); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Security: Limit request body size to 1MB to prevent OOM attacks.
+	// Security: Limit request body size to 1MB.
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -34,8 +41,7 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	evalCtx := evalCtxPool.Get().(*models.EvaluationContext)
 	defer evalCtxPool.Put(evalCtx)
 
-	// Performance: Manually reset fields to preserve map capacity.
-	// clear() empties the map but keeps the underlying memory allocated.
+	// Reset context for reuse
 	evalCtx.UserID = ""
 	evalCtx.Country = ""
 	evalCtx.State = ""
@@ -55,7 +61,6 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := h.requestCtx(r)
 	defer cancel()
 
-	// Refactor: Call GetByKey instead of GetByID
 	flag, err := h.repo.GetByKey(ctx, key)
 	if err != nil {
 		h.mapRepoError(w, err, "evaluate flag")

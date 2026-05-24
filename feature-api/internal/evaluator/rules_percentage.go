@@ -43,16 +43,10 @@ func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationCont
 
 	sp, ok1 := toSafeFloat(rule.Config["startPercent"])
 	ep, ok2 := toSafeFloat(rule.Config["endPercent"])
-	saRaw, ok3 := rule.Config["startAt"].(string)
-	eaRaw, ok4 := rule.Config["endAt"].(string)
+	startAt, ok3 := toSafeTime(rule.Config["startAt"])
+	endAt, ok4 := toSafeTime(rule.Config["endAt"])
 
 	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return false, false
-	}
-
-	startAt, err1 := time.Parse(time.RFC3339, saRaw)
-	endAt, err2 := time.Parse(time.RFC3339, eaRaw)
-	if err1 != nil || err2 != nil {
 		return false, false
 	}
 

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"sync"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -18,7 +19,9 @@ import (
 )
 
 const (
-	keyCachePrefix = "flags:key:"
+	keyCachePrefix = "flags:key:v3:"
+	negCacheValue  = "__404__"
+	shardCount     = 64
 )
 
 // RedisClient defines the subset of redis.Client methods used by the repository.
@@ -39,6 +42,64 @@ type MongoCollection interface {
 	Database() *mongo.Database
 }
 
+type cacheItem struct {
+	flag      *models.Flag
+	expiresAt time.Time
+}
+
+type shard struct {
+	sync.RWMutex
+	data map[string]cacheItem
+}
+
+// ShardedL1Cache is a high-concurrency in-memory cache that minimizes lock contention.
+type ShardedL1Cache struct {
+	shards [shardCount]*shard
+}
+
+func newShardedL1Cache() *ShardedL1Cache {
+	c := &ShardedL1Cache{}
+	for i := 0; i < shardCount; i++ {
+		c.shards[i] = &shard{data: make(map[string]cacheItem)}
+	}
+	return c
+}
+
+func (c *ShardedL1Cache) getShard(key string) *shard {
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	return c.shards[h.Sum32()%shardCount]
+}
+
+func (c *ShardedL1Cache) Get(key string) (*models.Flag, bool) {
+	s := c.getShard(key)
+	s.RLock()
+	item, ok := s.data[key]
+	s.RUnlock()
+
+	if !ok || time.Now().After(item.expiresAt) {
+		return nil, false
+	}
+	return item.flag, true
+}
+
+func (c *ShardedL1Cache) Set(key string, flag *models.Flag, ttl time.Duration) {
+	s := c.getShard(key)
+	s.Lock()
+	s.data[key] = cacheItem{
+		flag:      flag,
+		expiresAt: time.Now().Add(ttl),
+	}
+	s.Unlock()
+}
+
+func (c *ShardedL1Cache) Remove(key string) {
+	s := c.getShard(key)
+	s.Lock()
+	delete(s.data, key)
+	s.Unlock()
+}
+
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
 // and a multi-tier cache (L1 LRU, L2 Redis).
 type MongoRedisRepository struct {
@@ -47,20 +108,18 @@ type MongoRedisRepository struct {
 	cacheTTL    time.Duration
 	cachePrefix string
 	sf          singleflight.Group
-	l1          *expirable.LRU[string, *models.Flag]
+	l1          *ShardedL1Cache
 }
 
 // NewMongoRedisRepository constructs a MongoRedisRepository.
 func NewMongoRedisRepository(col MongoCollection, rdb RedisClient, cacheTTL time.Duration, cachePrefix string) *MongoRedisRepository {
-	// Initialize L1 cache with 1000 items and a 10-second TTL.
-	l1 := expirable.NewLRU[string, *models.Flag](1000, nil, 10*time.Second)
 	return &MongoRedisRepository{
 		col:         col,
 		rdb:         rdb,
 		cacheTTL:    cacheTTL,
 		cachePrefix: cachePrefix,
 		sf:          singleflight.Group{},
-		l1:          l1,
+		l1:          newShardedL1Cache(),
 	}
 }
 
@@ -95,7 +154,6 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 		return nil, ErrInvalidID
 	}
 
-	// For ID lookups, we'll keep it simple for management routes
 	var flag models.Flag
 	if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -108,17 +166,25 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 
 // GetByKey retrieves a single feature flag by its unique key, checking L1 and L2 cache first.
 func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*models.Flag, error) {
-	// Tier 1: L1 In-Memory LRU
+	// Tier 1: Sharded L1 Cache (Low Contention)
 	if flag, ok := r.l1.Get(key); ok {
+		if flag == nil {
+			return nil, ErrNotFound
+		}
 		return flag.Clone(), nil
 	}
 
 	cacheKey := keyCachePrefix + key
+
 	// Tier 2: L2 Redis Cache
-	if cached, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+	if cached, err := r.rdb.Get(ctx, cacheKey).Result(); err == nil {
+		if cached == negCacheValue {
+			r.l1.Set(key, nil, 1*time.Minute)
+			return nil, ErrNotFound
+		}
 		var flag models.Flag
-		if jsonErr := json.Unmarshal(cached, &flag); jsonErr == nil {
-			r.l1.Add(key, &flag) // Promote to L1
+		if jsonErr := json.Unmarshal([]byte(cached), &flag); jsonErr == nil {
+			r.l1.Set(key, &flag, r.cacheTTL)
 			return &flag, nil
 		}
 	}
@@ -131,17 +197,17 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 		var flag models.Flag
 		if err := r.col.FindOne(dbCtx, bson.M{"key": key}).Decode(&flag); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
+				_ = r.rdb.Set(dbCtx, cacheKey, negCacheValue, 1*time.Minute).Err()
+				r.l1.Set(key, nil, 1*time.Minute)
 				return nil, ErrNotFound
 			}
 			return nil, fmt.Errorf("find flag: %w", err)
 		}
 
-		// Update Redis (L2)
 		if payload, err := json.Marshal(flag); err == nil {
 			_ = r.rdb.Set(dbCtx, cacheKey, payload, r.cacheTTL).Err()
 		}
-		// Update L1
-		r.l1.Add(key, &flag)
+		r.l1.Set(key, &flag, r.cacheTTL)
 
 		return &flag, nil
 	})
@@ -187,7 +253,6 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 		return nil, ErrInvalidID
 	}
 
-	// Get current key to invalidate cache
 	current, err := r.GetByID(ctx, id)
 	if err != nil {
 		return nil, err

@@ -1,17 +1,18 @@
 package models
 
-// EvaluationContext contains user information for flag evaluation.
+// EvaluationContext contains user-specific data used to match rules.
 type EvaluationContext struct {
-	UserID     string         `bson:"userId"     json:"userId"`
-	Country    string         `bson:"country"    json:"country"`
-	State      string         `bson:"state"      json:"state"`
-	City       string         `bson:"city"       json:"city"`
-	ZipCode    string         `bson:"zipCode"    json:"zipCode"`
-	Attributes map[string]any `bson:"attributes" json:"attributes"`
+	UserID     string         `json:"userId"`
+	Country    string         `json:"country"`
+	State      string         `json:"state"`
+	City       string         `json:"city"`
+	ZipCode    string         `json:"zipCode"`
+	Attributes map[string]any `json:"attributes"`
 }
 
-// EvaluationResult contains the result of flag evaluation.
+// EvaluationResult is the response returned to the client.
 type EvaluationResult struct {
-	Enabled bool   `json:"enabled"`
-	Reason  string `json:"reason"`
+	Enabled  bool           `json:"enabled"`
+	Reason   string         `json:"reason"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }

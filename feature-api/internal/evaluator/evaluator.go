@@ -16,24 +16,33 @@ func New() *Evaluator {
 
 // Evaluate determines the enabled state of a flag based on its rules and the provided context.
 func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
+	// Capture time once for the entire evaluation.
+	now := time.Now().UTC()
+	
+	// Principal optimization: Return the exact evaluation time in metadata
+	// to synchronize tests and client-side logging.
+	metadata := map[string]any{
+		"evaluatedAt": now.Format(time.RFC3339Nano),
+	}
+
 	if !flag.Enabled {
-		return models.EvaluationResult{Enabled: false, Reason: "flag disabled"}
+		return models.EvaluationResult{Enabled: false, Reason: "flag disabled", Metadata: metadata}
 	}
 
 	if len(flag.Rules) == 0 {
-		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)"}
+		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)", Metadata: metadata}
 	}
 
-	// Capture time once for all rules in this request to avoid syscall storm
-	// and ensure consistency across rule evaluations.
-	now := time.Now().UTC()
-
+	var result models.EvaluationResult
 	switch flag.RuleMatchStrategy {
 	case models.RuleMatchStrategyAll:
-		return e.evaluateAll(flag, ctx, now)
+		result = e.evaluateAll(flag, ctx, now)
 	default: // RuleMatchStrategyAny is default
-		return e.evaluateAny(flag, ctx, now)
+		result = e.evaluateAny(flag, ctx, now)
 	}
+
+	result.Metadata = metadata
+	return result
 }
 
 func (e *Evaluator) evaluateAny(flag *models.Flag, ctx models.EvaluationContext, now time.Time) models.EvaluationResult {

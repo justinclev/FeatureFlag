@@ -3,6 +3,7 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -18,17 +19,31 @@ func (rr *responseRecorder) WriteHeader(status int) {
 }
 
 // Logging returns a middleware that emits a structured slog line per request.
+// Optimized: Skips logging for the evaluation hot path and checks level before processing.
 func Logging(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Principal optimization: Don't log evaluation hits at high frequency.
+		// Use a simple path check to skip the heavy lifting.
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/evaluate") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if !logger.Enabled(r.Context(), slog.LevelInfo) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		start := time.Now()
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		
 		logger.Info("request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			"path", path,
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
-			"remote_addr", r.RemoteAddr,
 		)
 	})
 }

@@ -3,6 +3,7 @@ package evaluator
 import (
 	"fmt"
 	"strconv"
+	"time"
 )
 
 func toString(v any) string {
@@ -48,6 +49,24 @@ func toSafeFloat(v any) (float64, bool) {
 		return f, err == nil
 	default:
 		return 0, false
+	}
+}
+
+func toSafeTime(v any) (time.Time, bool) {
+	if v == nil {
+		return time.Time{}, false
+	}
+	switch v := v.(type) {
+	case time.Time:
+		return v, true
+	case string:
+		if v == "" {
+			return time.Time{}, false
+		}
+		t, err := time.Parse(time.RFC3339, v)
+		return t, err == nil
+	default:
+		return time.Time{}, false
 	}
 }
 

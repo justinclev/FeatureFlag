@@ -3,7 +3,7 @@
 # --- CONFIG ---
 API_URL="http://localhost:8081/api/flags"
 API_KEY="test-api-key"
-CONCURRENCY=500
+CONCURRENCY=2000
 DURATION="60s"
 # --------------
 
