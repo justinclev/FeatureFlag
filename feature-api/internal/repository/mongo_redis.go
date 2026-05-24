@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	// Principal optimization: Increment cache version to ensure fresh logic is applied.
 	keyCachePrefix = "flags:key:v5:"
 	negCacheValue  = "__404__"
 	shardCount     = 64
@@ -120,7 +119,7 @@ func (c *ShardedL1Cache) Remove(key string) {
 }
 
 // MongoRedisRepository implements FlagRepository using MongoDB for persistence
-// and a multi-tier cache (L1 LRU, L2 Redis).
+// and a multi-tier cache.
 type MongoRedisRepository struct {
 	col         MongoCollection
 	rdb         RedisClient
@@ -183,7 +182,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 	return &flag, nil
 }
 
-// GetByKey retrieves a single feature flag by its unique key, checking L1 and L2 cache first.
+// GetByKey retrieves a single feature flag by its unique key, checking caches first.
 func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*models.Flag, error) {
 	// Tier 1: Sharded L1 Cache
 	if flag, ok := r.l1.Get(key); ok {

@@ -64,10 +64,7 @@ func run() error {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	// Principal optimization: Reorder middleware for maximum safety and observability.
-	// 1. Recovery is at the top to catch any panic.
-	// 2. Auth is next to fail fast and log unauthorized attempts.
-	// 3. CORS and Logging follow.
+	// Middleware chain: Recovery -> Auth -> CORS -> Logging
 	handler := middleware.Recovery(logger,
 		middleware.APIKeyAuth(cfg.APIKey, logger,
 			middleware.CORS(cfg.CORSAllowedOrigin,
@@ -77,10 +74,9 @@ func run() error {
 	)
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: handler,
-		// Principal Security: Limit max header size to 1MB to prevent resource exhaustion.
-		MaxHeaderBytes: 1 << 20,
+		Addr:           ":" + cfg.Port,
+		Handler:        handler,
+		MaxHeaderBytes: 1 << 20, // 1MB
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		IdleTimeout:    120 * time.Second,

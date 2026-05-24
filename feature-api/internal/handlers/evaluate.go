@@ -15,27 +15,22 @@ var (
 			return &models.EvaluationContext{}
 		},
 	}
-	// Principal optimization: Pool byte buffers to reduce GC pressure
 	bufferPool = sync.Pool{
 		New: func() any {
-			// 32KB is enough for any evaluation payload (capped at 1MB by MaxBytesReader)
 			return make([]byte, 32*1024)
 		},
 	}
 )
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
-	// Principal optimization: Renamed to key for semantic accuracy.
 	key := r.PathValue("key")
 	if err := h.validateKey(key); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Security: Limit request body size to 1MB.
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	
-	// Principal Optimization: Use Pooled Buffer for Reading
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "request too large or invalid")
