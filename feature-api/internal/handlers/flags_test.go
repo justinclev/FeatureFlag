@@ -1,4 +1,4 @@
-package handlers_test
+package handlers
 
 import (
 	"encoding/json"
@@ -267,7 +267,7 @@ func TestCreateFlag_InvalidRule(t *testing.T) {
 func TestUpdateFlag_InvalidRule(t *testing.T) {
 	h := newHandler(&mockRepo{})
 	body := `{"rules":[{"type":"attribute","config":{"attributeKey":"k"}}]}` // missing op
-	rr := serve(h, http.MethodPatch, "/api/flags/id", body)
+	rr := serve(h, http.MethodPatch, "/api/flags/"+bson.NewObjectID().Hex(), body)
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}
@@ -294,6 +294,47 @@ func TestCreateFlag_GradualMissingFields(t *testing.T) {
 	h := newHandler(&mockRepo{})
 	body := `{"name":"n","key":"k","rules":[{"type":"gradual","config":{}}]}`
 	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestGetFlag_InvalidIDFormat(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodGet, "/api/flags/not-a-hex-id", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid ID format, got %d", rr.Code)
+	}
+}
+
+func TestListFlags_LimitCap(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodGet, "/api/flags?limit=500", "")
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestCreateFlag_InvalidAttributeRule(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	body := `{"name":"n","key":"k","rules":[{"type":"attribute","config":{"attributeKey":"k"}}]}` // missing op
+	rr := serve(h, http.MethodPost, "/api/flags", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestUpdateFlag_InvalidIDFormat(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodPatch, "/api/flags/invalid-id", `{"name":"n"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestDeleteFlag_InvalidIDFormat(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	rr := serve(h, http.MethodDelete, "/api/flags/invalid-id", "")
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}

@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
 )
@@ -18,6 +16,12 @@ var evalCtxPool = sync.Pool{
 }
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := h.validateID(id); err != nil {
+		h.mapRepoError(w, err, "evaluate flag")
+		return
+	}
+
 	// Security: Limit request body size to 1MB to prevent OOM attacks.
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	body, err := io.ReadAll(r.Body)
@@ -47,19 +51,15 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := h.requestCtx(r)
 	defer cancel()
 
-	flag, err := h.repo.GetByID(ctx, r.PathValue("id"))
+	flag, err := h.repo.GetByID(ctx, id)
 	if err != nil {
 		h.mapRepoError(w, err, "evaluate flag")
 		return
 	}
 
 	result := h.evaluator.Evaluate(flag, *evalCtx)
-
-	// Performance: Use writeJSON for safety and consistency. 
-	// The overhead of json.Marshal on this small struct is negligible 
-	// compared to the risk of JSON injection from manual string building.
 	writeJSON(w, http.StatusOK, result)
 }

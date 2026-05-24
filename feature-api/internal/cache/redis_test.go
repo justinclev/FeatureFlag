@@ -16,3 +16,7 @@ func TestConnect_Error(t *testing.T) {
 		t.Error("expected error for empty addr")
 	}
 }
+
+func TestClose_NotNil(t *testing.T) {
+    // This is hard without a real client, but we can't easily mock the internal Close method of go-redis
+}

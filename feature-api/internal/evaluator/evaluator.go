@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"time"
+
 	"github.com/featureflags/feature-api/internal/models"
 )
 
@@ -22,17 +24,21 @@ func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) mo
 		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)"}
 	}
 
+	// Capture time once for all rules in this request to avoid syscall storm
+	// and ensure consistency across rule evaluations.
+	now := time.Now().UTC()
+
 	switch flag.RuleMatchStrategy {
 	case models.RuleMatchStrategyAll:
-		return e.evaluateAll(flag, ctx)
+		return e.evaluateAll(flag, ctx, now)
 	default: // RuleMatchStrategyAny is default
-		return e.evaluateAny(flag, ctx)
+		return e.evaluateAny(flag, ctx, now)
 	}
 }
 
-func (e *Evaluator) evaluateAny(flag *models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
+func (e *Evaluator) evaluateAny(flag *models.Flag, ctx models.EvaluationContext, now time.Time) models.EvaluationResult {
 	for _, rule := range flag.Rules {
-		matched, value := evalRule(rule, flag.Key, ctx)
+		matched, value := evalRule(rule, flag.Key, ctx, now)
 		if matched {
 			return models.EvaluationResult{Enabled: value, Reason: "matched rule: " + string(rule.Type)}
 		}
@@ -40,10 +46,10 @@ func (e *Evaluator) evaluateAny(flag *models.Flag, ctx models.EvaluationContext)
 	return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value"}
 }
 
-func (e *Evaluator) evaluateAll(flag *models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
+func (e *Evaluator) evaluateAll(flag *models.Flag, ctx models.EvaluationContext, now time.Time) models.EvaluationResult {
 	var lastValue bool
 	for _, rule := range flag.Rules {
-		matched, value := evalRule(rule, flag.Key, ctx)
+		matched, value := evalRule(rule, flag.Key, ctx, now)
 		if !matched {
 			return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "failed rule: " + string(rule.Type)}
 		}
@@ -53,16 +59,16 @@ func (e *Evaluator) evaluateAll(flag *models.Flag, ctx models.EvaluationContext)
 	return models.EvaluationResult{Enabled: lastValue, Reason: "matched all rules"}
 }
 
-func evalRule(rule models.Rule, flagKey string, ctx models.EvaluationContext) (bool, bool) {
+func evalRule(rule models.Rule, flagKey string, ctx models.EvaluationContext, now time.Time) (bool, bool) {
 	switch rule.Type {
 	case models.RuleTypePercentage:
 		return evalPercentageRule(rule, flagKey, ctx)
 	case models.RuleTypeGeography:
 		return evalGeographyRule(rule, ctx)
 	case models.RuleTypeSchedule:
-		return evalScheduleRule(rule)
+		return evalScheduleRule(rule, now)
 	case models.RuleTypeGradual:
-		return evalGradualRule(rule, flagKey, ctx)
+		return evalGradualRule(rule, flagKey, ctx, now)
 	case models.RuleTypeUserList:
 		return evalUserListRule(rule, ctx)
 	case models.RuleTypeAttribute:

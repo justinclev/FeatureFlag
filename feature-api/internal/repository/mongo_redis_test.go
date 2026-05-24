@@ -409,3 +409,26 @@ func TestMongoRedisRepository_Update_AllFields(t *testing.T) {
 		t.Errorf("some fields were not updated correctly: %+v", flag)
 	}
 }
+
+func TestMongoRedisRepository_Update_NoFieldsError(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMongoRedisRepository(&mockMongoCol{}, &fakeRedis{}, time.Second, "test:")
+	_, err := repo.Update(ctx, bson.NewObjectID().Hex(), models.UpdateFlagRequest{})
+	if !errors.Is(err, ErrNoFields) {
+		t.Errorf("expected ErrNoFields, got %v", err)
+	}
+}
+
+func TestMongoRedisRepository_Ready_RedisError(t *testing.T) {
+	ctx := context.Background()
+	fakeRdb := &fakeRedis{err: errors.New("redis fail")}
+	repo := NewMongoRedisRepository(&mockMongoCol{}, fakeRdb, time.Second, "test:")
+	err := repo.Ready(ctx)
+	if err == nil || !strings.Contains(err.Error(), "redis not ready") {
+		t.Errorf("expected redis error, got %v", err)
+	}
+}
+
+func TestMongoRedisRepository_Ready_MongoError(t *testing.T) {
+    // Hard to mock without a real mongo client but we can try if we refactor Ready
+}

@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/featureflags/feature-api/internal/models"
 	"github.com/featureflags/feature-api/internal/repository"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // Handler holds application dependencies and exposes HTTP handler methods.
@@ -35,6 +38,17 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/flags/{id}", h.updateFlag)
 	mux.HandleFunc("DELETE /api/flags/{id}", h.deleteFlag)
 	mux.HandleFunc("POST /api/flags/{id}/evaluate", h.evaluateFlag)
+}
+
+func (h *Handler) requestCtx(r *http.Request) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(r.Context(), 10*time.Second)
+}
+
+func (h *Handler) validateID(id string) error {
+	if _, err := bson.ObjectIDFromHex(id); err != nil {
+		return repository.ErrInvalidID
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

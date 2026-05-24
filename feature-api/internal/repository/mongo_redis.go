@@ -146,11 +146,6 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 // Create inserts a new feature flag into the database.
 func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlagRequest) (*models.Flag, error) {
 	now := time.Now().UTC()
-	strategy := req.RuleMatchStrategy
-	if strategy == "" {
-		strategy = models.RuleMatchStrategyAny
-	}
-
 	flag := models.Flag{
 		ID:                bson.NewObjectID(),
 		Name:              req.Name,
@@ -159,7 +154,7 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 		Description:       req.Description,
 		DefaultValue:      req.DefaultValue,
 		Rules:             req.Rules,
-		RuleMatchStrategy: strategy,
+		RuleMatchStrategy: req.RuleMatchStrategy,
 		CreatedBy:         req.CreatedBy,
 		CreatedAt:         now,
 		UpdatedAt:         now,
@@ -172,7 +167,7 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 		return nil, fmt.Errorf("insert flag: %w", err)
 	}
 
-	r.invalidate(ctx, flag.ID.Hex())
+	r.invalidate(flag.ID.Hex())
 	return &flag, nil
 }
 
@@ -223,7 +218,7 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 		return nil, fmt.Errorf("update flag: %w", err)
 	}
 
-	r.invalidate(ctx, id)
+	r.invalidate(id)
 	return &flag, nil
 }
 
@@ -242,12 +237,17 @@ func (r *MongoRedisRepository) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 
-	r.invalidate(ctx, id)
+	r.invalidate(id)
 	return nil
 }
 
-func (r *MongoRedisRepository) invalidate(ctx context.Context, id string) {
-	r.l1.Remove(id)                            // Clear L1
+func (r *MongoRedisRepository) invalidate(id string) {
+	// IMPORTANT: Use context.Background() to ensure invalidation completes
+	// even if the triggering request context is canceled.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	r.l1.Remove(id)                                    // Clear L1
 	_ = r.rdb.Del(ctx, r.cachePrefix+id).Err() // Clear L2
 }
 

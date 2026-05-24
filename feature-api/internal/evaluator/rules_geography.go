@@ -52,7 +52,7 @@ func evalGeographyRule(rule models.Rule, ctx models.EvaluationContext) (bool, bo
 	if len(rule.Config.ZipCodes) > 0 {
 		matched := false
 		for _, zip := range rule.Config.ZipCodes {
-			if zip == ctx.ZipCode {
+			if strings.EqualFold(zip, ctx.ZipCode) {
 				matched = true
 				break
 			}

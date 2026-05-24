@@ -6,7 +6,7 @@ import (
 	"github.com/featureflags/feature-api/internal/models"
 )
 
-func evalScheduleRule(rule models.Rule) (bool, bool) {
+func evalScheduleRule(rule models.Rule, now time.Time) (bool, bool) {
 	if rule.Config.EnableAt == nil && rule.Config.DisableAt == nil {
 		return false, false
 	}
@@ -17,8 +17,6 @@ func evalScheduleRule(rule models.Rule) (bool, bool) {
 			return false, false
 		}
 	}
-
-	now := time.Now().UTC()
 
 	if rule.Config.EnableAt != nil && now.Before(*rule.Config.EnableAt) {
 		return false, false

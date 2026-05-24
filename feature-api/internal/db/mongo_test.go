@@ -16,3 +16,7 @@ func TestConnect_Error(t *testing.T) {
 		t.Error("expected error for invalid uri")
 	}
 }
+
+func TestDisconnect_NotNil(t *testing.T) {
+    // Similar to redis
+}

@@ -32,7 +32,7 @@ type Flag struct {
 	Enabled            bool              `bson:"enabled"           json:"enabled"`
 }
 
-// Clone returns a deep copy of the Flag.
+// Clone returns a true deep copy of the Flag.
 func (f *Flag) Clone() *Flag {
 	if f == nil {
 		return nil
@@ -40,9 +40,77 @@ func (f *Flag) Clone() *Flag {
 	newFlag := *f
 	if f.Rules != nil {
 		newFlag.Rules = make([]Rule, len(f.Rules))
-		copy(newFlag.Rules, f.Rules)
+		for i, r := range f.Rules {
+			newFlag.Rules[i] = r.Clone()
+		}
 	}
 	return &newFlag
+}
+
+// Clone returns a deep copy of the Rule.
+func (r Rule) Clone() Rule {
+	newRule := r
+	newRule.Config = r.Config.Clone()
+	return newRule
+}
+
+// Clone returns a deep copy of RuleConfig, copying all pointers to new memory.
+func (c RuleConfig) Clone() RuleConfig {
+	newCfg := c
+
+	// Deep copy slices
+	if c.Countries != nil {
+		newCfg.Countries = make([]string, len(c.Countries))
+		copy(newCfg.Countries, c.Countries)
+	}
+	if c.States != nil {
+		newCfg.States = make([]string, len(c.States))
+		copy(newCfg.States, c.States)
+	}
+	if c.Cities != nil {
+		newCfg.Cities = make([]string, len(c.Cities))
+		copy(newCfg.Cities, c.Cities)
+	}
+	if c.ZipCodes != nil {
+		newCfg.ZipCodes = make([]string, len(c.ZipCodes))
+		copy(newCfg.ZipCodes, c.ZipCodes)
+	}
+	if c.UserIDs != nil {
+		newCfg.UserIDs = make([]string, len(c.UserIDs))
+		copy(newCfg.UserIDs, c.UserIDs)
+	}
+
+	// Deep copy pointers
+	if c.Percentage != nil {
+		v := *c.Percentage
+		newCfg.Percentage = &v
+	}
+	if c.EnableAt != nil {
+		v := *c.EnableAt
+		newCfg.EnableAt = &v
+	}
+	if c.DisableAt != nil {
+		v := *c.DisableAt
+		newCfg.DisableAt = &v
+	}
+	if c.StartAt != nil {
+		v := *c.StartAt
+		newCfg.StartAt = &v
+	}
+	if c.EndAt != nil {
+		v := *c.EndAt
+		newCfg.EndAt = &v
+	}
+	if c.StartPercent != nil {
+		v := *c.StartPercent
+		newCfg.StartPercent = &v
+	}
+	if c.EndPercent != nil {
+		v := *c.EndPercent
+		newCfg.EndPercent = &v
+	}
+
+	return newCfg
 }
 
 // CreateFlagRequest defines the schema for creating a new feature flag.

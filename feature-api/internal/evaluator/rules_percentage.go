@@ -33,7 +33,7 @@ func evalPercentageRule(rule models.Rule, flagKey string, ctx models.EvaluationC
 	return bucket < *rule.Config.Percentage, rule.Value
 }
 
-func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationContext) (bool, bool) {
+func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationContext, now time.Time) (bool, bool) {
 	if ctx.UserID == "" {
 		return false, false
 	}
@@ -42,8 +42,6 @@ func evalGradualRule(rule models.Rule, flagKey string, ctx models.EvaluationCont
 	if c.StartPercent == nil || c.EndPercent == nil || c.StartAt == nil || c.EndAt == nil {
 		return false, false
 	}
-
-	now := time.Now().UTC()
 
 	var effectivePercent float64
 	if now.Before(*c.StartAt) {

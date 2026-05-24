@@ -1,15 +1,14 @@
-package evaluator_test
+package evaluator
 
 import (
 	"testing"
 	"time"
 
-	"github.com/featureflags/feature-api/internal/evaluator"
 	"github.com/featureflags/feature-api/internal/models"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-var eval = evaluator.New()
+var eval = New()
 
 func ptrFloat(v float64) *float64 { return &v }
 func ptrTime(t time.Time) *time.Time { return &t }
@@ -345,7 +344,7 @@ func TestEvaluate_Attribute(t *testing.T) {
 		name      string
 		op        string
 		cfgValue  string
-		attrValue string
+		attrValue any
 		wantMatch bool
 	}{
 		{"eq match", "eq", "premium", "premium", true},
@@ -355,12 +354,14 @@ func TestEvaluate_Attribute(t *testing.T) {
 		{"neq empty expected", "neq", "", "something", true},
 		{"contains match", "contains", "pro", "enterprise-pro", true},
 		{"contains no match", "contains", "pro", "basic", false},
-		{"gt match", "gt", "3", "5", true},
-		{"gt no match", "gt", "5", "3", false},
-		{"lt match", "lt", "5", "3", true},
-		{"lt no match", "lt", "3", "5", false},
+		{"gt match", "gt", "3", "5.0", true},
+		{"gt no match", "gt", "5", 3.0, false},
+		{"lt match", "lt", "5", 3.0, true},
+		{"lt no match", "lt", "3", 5.0, false},
 		{"unknown op", "between", "1", "2", false},
 		{"non-numeric gt", "gt", "abc", "xyz", false},
+		{"bool match", "eq", "true", true, true},
+		{"bool mismatch", "eq", "true", false, false},
 	}
 
 	for _, tt := range tests {
@@ -376,7 +377,7 @@ func TestEvaluate_Attribute(t *testing.T) {
 			}
 			result := eval.Evaluate(&flag, ctx)
 			if result.Enabled != tt.wantMatch {
-				t.Errorf("op=%q cfgValue=%q attrValue=%q: expected enabled=%v, got %v",
+				t.Errorf("op=%q cfgValue=%q attrValue=%v: expected enabled=%v, got %v",
 					tt.op, tt.cfgValue, tt.attrValue, tt.wantMatch, result.Enabled)
 			}
 		})
@@ -449,10 +450,8 @@ func TestEvaluate_Gradual_InWindow(t *testing.T) {
 	flag := flagWith([]models.Rule{rule}, false, true)
 	
 	// Middle of the window (50%)
-	// UserID bucketing is deterministic. Let's find a user that is in/out.
-	// user-1 bucketing is usually consistent.
 	ctx := models.EvaluationContext{UserID: "user-1"}
-	_ = eval.Evaluate(&flag, ctx) // Just trigger it.
+	_ = eval.Evaluate(&flag, ctx) 
 }
 
 func TestEvaluate_Gradual_MissingConfig_NoMatch(t *testing.T) {
@@ -497,8 +496,6 @@ func TestEvaluate_Gradual_InvalidDuration(t *testing.T) {
 	}, true)
 	flag := flagWith([]models.Rule{rule}, false, true)
 	
-	// If now is exactly StartAt, now.Before is false, now.After is false.
-	// It hits the duration check.
 	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
 	if !result.Enabled {
 		t.Error("expected enabled via EndPercent for zero duration")
@@ -515,4 +512,35 @@ func TestEvaluate_Schedule_InvalidRange(t *testing.T) {
 	if eval.Evaluate(&flag, models.EvaluationContext{}).Enabled {
 		t.Error("expected no match for invalid schedule range")
 	}
+}
+
+func TestEvaluate_UnknownStrategy_DefaultsToAny(t *testing.T) {
+	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, true)
+	flag := flagWith([]models.Rule{rule1}, false, true)
+	flag.RuleMatchStrategy = "invalid"
+	
+	if !eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"}).Enabled {
+		t.Error("expected default to ANY strategy for invalid input")
+	}
+}
+
+func TestEvaluate_StrategyAll_ValueCheck(t *testing.T) {
+	rule1 := ruleWith(models.RuleTypeUserList, models.RuleConfig{UserIDs: []string{"user-1"}}, false)
+	rule2 := ruleWith(models.RuleTypeGeography, models.RuleConfig{Countries: []string{"US"}}, true)
+	flag := flagWith([]models.Rule{rule1, rule2}, true, true)
+	flag.RuleMatchStrategy = models.RuleMatchStrategyAll
+	
+	ctx := models.EvaluationContext{UserID: "user-1", Country: "US"}
+	result := eval.Evaluate(&flag, ctx)
+	if !result.Enabled {
+		t.Error("expected enabled=true (value of last rule)")
+	}
+}
+
+func TestToString_Default(t *testing.T) {
+    type custom struct{ v int }
+    s := toString(custom{v: 10})
+    if s != "{10}" {
+        t.Errorf("expected {10}, got %q", s)
+    }
 }

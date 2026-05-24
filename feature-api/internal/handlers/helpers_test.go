@@ -1,4 +1,4 @@
-package handlers_test
+package handlers
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/featureflags/feature-api/internal/handlers"
 	"github.com/featureflags/feature-api/internal/models"
 	"github.com/featureflags/feature-api/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -103,13 +102,13 @@ func (m *mockEvaluator) Evaluate(_ *models.Flag, _ models.EvaluationContext) mod
 }
 
 // newHandler creates a Handler with a quiet logger suitable for tests.
-func newHandler(repo repository.FlagRepository) *handlers.Handler {
+func newHandler(repo repository.FlagRepository) *Handler {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	return handlers.New(repo, logger, &mockEvaluator{})
+	return New(repo, logger, &mockEvaluator{})
 }
 
 // serve registers routes and dispatches a single request, returning the recorder.
-func serve(h *handlers.Handler, method, path, body string) *httptest.ResponseRecorder {
+func serve(h *Handler, method, path, body string) *httptest.ResponseRecorder {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
