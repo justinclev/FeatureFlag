@@ -95,7 +95,9 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 
 	// Tier 1: L1 In-Memory LRU (Near Zero Cost)
 	if flag, ok := r.l1.Get(id); ok {
-		return flag, nil
+		// IMPORTANT: Return a clone to prevent external modification 
+		// from poisoning the cache.
+		return flag.Clone(), nil
 	}
 
 	cacheKey := r.cachePrefix + id
@@ -110,8 +112,14 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 
 	// Tier 3: Singleflight to DB (Prevents Thundering Herd)
 	val, err, _ := r.sf.Do(id, func() (interface{}, error) {
+		// IMPORTANT: Use context.Background() for the actual work to ensure it
+		// completes even if the original request context is canceled.
+		// Use a separate timeout to prevent hanging.
+		dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		var flag models.Flag
-		if err := r.col.FindOne(ctx, bson.M{"_id": oid}).Decode(&flag); err != nil {
+		if err := r.col.FindOne(dbCtx, bson.M{"_id": oid}).Decode(&flag); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
 				return nil, ErrNotFound
 			}
@@ -120,7 +128,7 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 
 		// Update Redis (L2)
 		if payload, err := json.Marshal(flag); err == nil {
-			_ = r.rdb.Set(ctx, cacheKey, payload, r.cacheTTL).Err()
+			_ = r.rdb.Set(dbCtx, cacheKey, payload, r.cacheTTL).Err()
 		}
 		// Update L1
 		r.l1.Add(id, &flag)
@@ -131,7 +139,8 @@ func (r *MongoRedisRepository) GetByID(ctx context.Context, id string) (*models.
 	if err != nil {
 		return nil, err
 	}
-	return val.(*models.Flag), nil
+	// Return a clone from the result too
+	return val.(*models.Flag).Clone(), nil
 }
 
 // Create inserts a new feature flag into the database.

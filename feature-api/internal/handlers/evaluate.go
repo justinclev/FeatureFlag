@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -19,9 +18,11 @@ var evalCtxPool = sync.Pool{
 }
 
 func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
+	// Security: Limit request body size to 1MB to prevent OOM attacks.
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "failed to read body")
+		writeError(w, http.StatusBadRequest, "request too large or invalid")
 		return
 	}
 
@@ -46,9 +47,8 @@ func (h *Handler) evaluateFlag(w http.ResponseWriter, r *http.Request) {
 
 	result := h.evaluator.Evaluate(flag, *evalCtx)
 
-	// Performance: Manually write JSON to bypass reflection overhead in json.Encoder
-	// for the high-throughput evaluation hot path (10k+ RPS goal).
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(w, `{"enabled":%t,"reason":"%s"}`, result.Enabled, result.Reason)
+	// Performance: Use writeJSON for safety and consistency. 
+	// The overhead of json.Marshal on this small struct is negligible 
+	// compared to the risk of JSON injection from manual string building.
+	writeJSON(w, http.StatusOK, result)
 }

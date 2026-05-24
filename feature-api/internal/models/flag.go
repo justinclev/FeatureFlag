@@ -18,7 +18,7 @@ const (
 
 // Flag is the domain model stored in MongoDB.
 type Flag struct {
-	ID                 bson.ObjectID     `bson:"_id,omitempty"     json:"id"`
+	ID                bson.ObjectID     `bson:"_id,omitempty"     json:"id"`
 	Name               string            `bson:"name"              json:"name"`
 	Description        string            `bson:"description"       json:"description"`
 	Key                string            `bson:"key"               json:"key"`
@@ -30,6 +30,19 @@ type Flag struct {
 	UpdatedAt          time.Time         `bson:"updatedAt"         json:"updatedAt"`
 	UpdatedBy          string            `bson:"updatedBy"         json:"updatedBy"`
 	Enabled            bool              `bson:"enabled"           json:"enabled"`
+}
+
+// Clone returns a deep copy of the Flag.
+func (f *Flag) Clone() *Flag {
+	if f == nil {
+		return nil
+	}
+	newFlag := *f
+	if f.Rules != nil {
+		newFlag.Rules = make([]Rule, len(f.Rules))
+		copy(newFlag.Rules, f.Rules)
+	}
+	return &newFlag
 }
 
 // CreateFlagRequest defines the schema for creating a new feature flag.

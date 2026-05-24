@@ -50,6 +50,7 @@ func (h *Handler) listFlags(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createFlag(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024) // 1MB limit
 	var req models.CreateFlagRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -85,6 +86,7 @@ func (h *Handler) getFlag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateFlag(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024) // 1MB limit
 	var req models.UpdateFlagRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

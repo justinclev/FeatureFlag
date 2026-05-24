@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
@@ -23,10 +24,38 @@ func Connect(cfg *config.Config) (*mongo.Client, *mongo.Database, error) {
 	}
 
 	if err = client.Ping(ctx, nil); err != nil {
+		_ = client.Disconnect(ctx)
 		return nil, nil, fmt.Errorf("mongo ping: %w", err)
 	}
 
-	return client, client.Database(cfg.MongoDBName), nil
+	db := client.Database(cfg.MongoDBName)
+
+	// Ensure Indexes
+	if err := ensureIndexes(ctx, db, cfg.MongoCollectionName); err != nil {
+		_ = client.Disconnect(ctx)
+		return nil, nil, fmt.Errorf("ensure indexes: %w", err)
+	}
+
+	return client, db, nil
+}
+
+func ensureIndexes(ctx context.Context, db *mongo.Database, collectionName string) error {
+	col := db.Collection(collectionName)
+
+	// Index on "key" (unique)
+	_, err := col.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "key", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Index on "enabled" for common filtering
+	_, err = col.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "enabled", Value: 1}},
+	})
+	return err
 }
 
 // Disconnect closes the MongoDB client gracefully.
@@ -38,4 +67,3 @@ func Disconnect(client *mongo.Client) {
 	defer cancel()
 	_ = client.Disconnect(ctx)
 }
-
