@@ -19,9 +19,8 @@ import (
 )
 
 const (
-	keyCachePrefix = "flags:key:v5:"
-	negCacheValue  = "__404__"
-	shardCount     = 64
+	negCacheValue = "__404__"
+	shardCount    = 64
 )
 
 // RedisClient defines the subset of redis.Client methods used by the repository.
@@ -192,7 +191,7 @@ func (r *MongoRedisRepository) GetByKey(ctx context.Context, key string) (*model
 		return flag.Clone(), nil
 	}
 
-	cacheKey := keyCachePrefix + key
+	cacheKey := r.cachePrefix + key
 
 	// Tier 2: L2 Redis Cache
 	if cached, err := r.rdb.Get(ctx, cacheKey).Result(); err == nil {
@@ -352,7 +351,7 @@ func (r *MongoRedisRepository) invalidate(key string) {
 	defer cancel()
 
 	r.l1.Remove(key)
-	_ = r.rdb.Del(ctx, keyCachePrefix+key).Err()
+	_ = r.rdb.Del(ctx, r.cachePrefix+key).Err()
 }
 
 // Ready verifies that both MongoDB and Redis are reachable.

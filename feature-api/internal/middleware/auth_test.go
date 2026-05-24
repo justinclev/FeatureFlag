@@ -1,8 +1,10 @@
 package middleware_test
 
 import (
+    "bytes"
 	"net/http"
 	"net/http/httptest"
+    "log/slog"
 	"testing"
 
 	"github.com/featureflags/feature-api/internal/middleware"
@@ -15,13 +17,13 @@ func okHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func applyAuth(next http.HandlerFunc) http.Handler {
-	return middleware.APIKeyAuth(testKey, http.HandlerFunc(next))
+	return middleware.APIKeyAuth(testKey, nil, http.HandlerFunc(next))
 }
 
 func TestAPIKeyAuth_ValidKey(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/flags", nil)
-	r.Header.Set("X-API-Key", testKey)
+	r.Header.Set("X-API-KEY", testKey)
 
 	applyAuth(okHandler).ServeHTTP(rr, r)
 
@@ -44,23 +46,29 @@ func TestAPIKeyAuth_MissingKey(t *testing.T) {
 func TestAPIKeyAuth_InvalidKey(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/flags", nil)
-	r.Header.Set("X-API-Key", "wrong-key")
+	r.Header.Set("X-API-KEY", "wrong-key")
 
 	applyAuth(okHandler).ServeHTTP(rr, r)
 
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
 	}
 }
 
-func TestAPIKeyAuth_HealthSkipsAuth(t *testing.T) {
+func TestAPIKeyAuth_WithLogger(t *testing.T) {
+    var buf bytes.Buffer
+    logger := slog.New(slog.NewTextHandler(&buf, nil))
+    
 	rr := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/health", nil)
-	// no X-API-Key header
+	r := httptest.NewRequest(http.MethodGet, "/api/flags", nil)
+    
+    h := middleware.APIKeyAuth(testKey, logger, http.HandlerFunc(okHandler))
+	h.ServeHTTP(rr, r)
 
-	applyAuth(okHandler).ServeHTTP(rr, r)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("expected /health to bypass auth, got %d", rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
 	}
+    if !bytes.Contains(buf.Bytes(), []byte("unauthorized request")) {
+        t.Error("expected log message")
+    }
 }

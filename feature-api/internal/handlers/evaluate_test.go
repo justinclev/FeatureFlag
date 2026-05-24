@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/featureflags/feature-api/internal/models"
@@ -49,5 +51,23 @@ func TestEvaluateFlag_InvalidJSON(t *testing.T) {
 	rr := serve(h, http.MethodPost, "/api/flags/some-key/evaluate", "invalid-json")
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestEvaluateFlag_KeyTooLong(t *testing.T) {
+	h := newHandler(&mockRepo{})
+	key := strings.Repeat("a", 65)
+	rr := serve(h, http.MethodPost, "/api/flags/"+key+"/evaluate", `{"userId":"u1"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for long key, got %d", rr.Code)
+	}
+}
+
+func TestEvaluateFlag_RepoError(t *testing.T) {
+	repo := &mockRepo{err: errors.New("fail")}
+	h := newHandler(repo)
+	rr := serve(h, http.MethodPost, "/api/flags/key/evaluate", `{"userId":"u1"}`)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
 	}
 }
