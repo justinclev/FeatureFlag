@@ -41,7 +41,7 @@ A microservices platform for managing and distributing feature flags, composed o
 
 ```bash
 # 1. Clone and enter the repo
-git clone <your-repo-url> && cd FeatureFlags
+git clone https://github.com/justinclev/FeatureFlag.git && cd FeatureFlags
 
 # 2. Build and start all services
 docker compose up --build
