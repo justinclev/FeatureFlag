@@ -30,3 +30,13 @@ dev-dashboard-api:
 
 dev-feature-api:
 	cd feature-api && go run ./...
+
+# ── Data & Testing ──────────────────────────────────────────────────────────
+
+seed-flags:
+	go run scripts/seed_flags.go
+
+test-flags:
+	go run scripts/test_flags.go
+
+test-all: seed-flags test-flags
