@@ -18,6 +18,8 @@ Set via environment variables:
 | "API_KEY" | Auth Key for X-API-KEY header | "" |
 | "CACHE_TTL_SECONDS" | Redis Cache TTL | "30" |
 | "LOG_LEVEL" | Logging level (debug, info, warn, error) | "info" |
+| "REQUEST_TIMEOUT_MS" | Internal request timeout | "5000" |
+| "CORS_ALLOWED_ORIGIN" | Allowed CORS origin | "http://localhost:4200" |
 
 ---
 

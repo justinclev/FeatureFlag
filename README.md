@@ -13,23 +13,23 @@ A microservices platform for managing and distributing feature flags, composed o
 │         │ REST                                      │
 │    ┌────▼────────────┐                              │
 │    │    feature-api  │                              │
-│    │    Go API :8081 │                              │
-│    └──────────┬──────┘                              │
-│               │                                     │
-│    ┌──────────▼───────────────────────────┐         │
-│    │              MongoDB :27018          │         │
-│    └──────────────────────────────────────┘         │
+│    │    Go API :8081 ├────────┐                     │
+│    └──────────┬──────┘        │                     │
+│               │               │                     │
+│    ┌──────────▼───────┐  ┌────▼─────────────┐       │
+│    │  MongoDB :27018  │  │   Redis :6380    │       │
+│    └──────────────────┘  └──────────────────┘       │
 └─────────────────────────────────────────────────────┘
 ```
 
 ## Services
 
-| Service         | URL                          | Description                      |
-| --------------- | ---------------------------- | -------------------------------- |
-| `dashboard`     | http://localhost:4200        | Angular management UI            |
-| `feature-api`   | http://localhost:8081/health | Go distribution data plane       |
-| `mongo`         | mongodb://localhost:27018    | MongoDB 7                        |
-| `redis`         | redis://localhost:6380       | Redis 7 (flag read cache)        |
+| Service         | URL                          | Port (Host) | Description                      |
+| --------------- | ---------------------------- | ----------- | -------------------------------- |
+| `dashboard`     | http://localhost:4200        | 4200        | Angular management UI            |
+| `feature-api`   | http://localhost:8081/health | 8081        | Go distribution data plane       |
+| `mongo`         | localhost:27018              | 27018       | MongoDB 7 (Data Store)           |
+| `redis`         | localhost:6380               | 6380        | Redis 7 (Flag Read Cache)        |
 
 ## Prerequisites
 
@@ -49,6 +49,8 @@ docker compose up --build
 # 3. Open the dashboard
 open http://localhost:4200
 ```
+
+> **Note:** The `feature-api` requires an `X-API-KEY` header for all requests except `/health`. The default key in Docker Compose is `test-api-key`.
 
 To stop everything:
 
@@ -71,6 +73,8 @@ npm start          # http://localhost:4200
 ```bash
 cd feature-api
 go mod tidy        # downloads dependencies and generates go.sum
+# Set required environment variables
+export API_KEY=local-dev-key
 go run ./...       # http://localhost:8080
 ```
 
@@ -80,13 +84,20 @@ go run ./...       # http://localhost:8080
 
 ### feature-api
 
-| Variable         | Default                     | Description               |
-| ---------------- | --------------------------- | ------------------------- |
-| `MONGO_URI`      | `mongodb://localhost:27017` | MongoDB connection string |
-| `REDIS_ADDR`     | `localhost:6379`            | Redis address             |
-| `REDIS_PASSWORD` | _(empty)_                   | Redis password (optional) |
-| `PORT`           | `8080`                      | HTTP listen port          |
-| `MONGO_DB_NAME`  | `feature_flags`             | MongoDB database name     |
+| Variable                | Default                     | Description                               |
+| ----------------------- | --------------------------- | ----------------------------------------- |
+| `API_KEY`               | _(required)_                | Auth key for `X-API-KEY` header           |
+| `PORT`                  | `8080`                      | HTTP listen port                          |
+| `MONGO_URI`             | `mongodb://localhost:27017` | MongoDB connection string                 |
+| `MONGO_DB_NAME`         | `feature_flags`             | MongoDB database name                     |
+| `MONGO_COLLECTION_NAME` | `flags`                     | MongoDB collection name                   |
+| `REDIS_ADDR`            | `localhost:6379`            | Redis address                             |
+| `REDIS_PASSWORD`        | _(empty)_                   | Redis password (optional)                 |
+| `REDIS_CACHE_PREFIX`    | `flags:id:`                 | Redis key prefix                          |
+| `CACHE_TTL_SECONDS`     | `30`                        | Redis cache TTL                           |
+| `LOG_LEVEL`             | `info`                      | Logging level (debug, info, warn, error)  |
+| `REQUEST_TIMEOUT_MS`    | `5000`                      | Internal request timeout                  |
+| `CORS_ALLOWED_ORIGIN`   | `http://localhost:4200`     | Allowed CORS origin                       |
 
 ## CI/CD
 
