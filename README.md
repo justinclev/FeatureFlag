@@ -80,6 +80,32 @@ go run ./...       # http://localhost:8080
 
 > **Note:** Run `go mod tidy` at least once before `docker compose build` so that `go.sum` is committed.
 
+## Testing & Seeding
+
+The `./scripts` directory contains Go utilities for populating the database and verifying evaluation logic.
+
+### 1. Seed Feature Flags
+Populate the database with a set of standard flags (Default, Attributes, User List) for testing.
+```bash
+go run scripts/seed_flags.go
+```
+
+### 2. Run Evaluation Tests
+Run a suite of positive and negative tests against the seeded flags. Output includes expected vs. actual values and a comparison of inputs vs. rules.
+```bash
+go run scripts/test_flags.go
+```
+
+**Example Output:**
+```text
+TEST NAME                           | FLAG KEY             | EXPECTED   | ACTUAL     | INPUT/RULES COMPARISON
+------------------------------------------------------------------------------------------------------------------------
+Default Flag - Positive             | defaultFeatureFlag   | true       | true       | SENT: {} | RULE: No rules, Default=true [PASS]
+Attributes Flag - Positive (Market) | attributesFeatureFlag | true       | true       | SENT: Market=US | RULE: Market=US [PASS]
+...
+Missing Flag - Negative             | NoFlagFlag           | false      | FALSE(404) | SENT: Key=NoFlagFlag | RULE: Non-existent [PASS]
+```
+
 ## Environment Variables
 
 ### feature-api
