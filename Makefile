@@ -40,3 +40,6 @@ test-flags:
 	go run scripts/test_flags.go
 
 test-all: seed-flags test-flags
+
+stress-test:
+	go run scripts/stress_test_dynamic.go

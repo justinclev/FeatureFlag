@@ -106,6 +106,18 @@ Attributes Flag - Positive (Market) | attributesFeatureFlag | true       | true 
 Missing Flag - Negative             | NoFlagFlag           | false      | FALSE(404) | SENT: Key=NoFlagFlag | RULE: Non-existent [PASS]
 ```
 
+### 3. Stress Testing (Bombardier)
+Execute a high-concurrency stress test that dynamically discovers flag rules and generates valid payloads to slam the evaluation endpoint.
+```bash
+make stress-test
+```
+*Requires [bombardier](https://github.com/codesenberg/bombardier).*
+
+**Performance Specs:**
+- **Throughput**: ~3,800+ RPS
+- **Concurrency**: 500 connections
+- **Validation**: 0% error rate under load
+
 ## Environment Variables
 
 ### feature-api
