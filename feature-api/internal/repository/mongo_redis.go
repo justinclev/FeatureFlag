@@ -76,6 +76,7 @@ func (c *ShardedL1Cache) janitor() {
 	}
 }
 
+// Cleanup removes all expired items from the cache.
 func (c *ShardedL1Cache) Cleanup() {
 	for i := 0; i < shardCount; i++ {
 		s := c.shards[i]
@@ -113,6 +114,7 @@ func (c *ShardedL1Cache) getShard(key string) *shard {
 	return c.shards[h.Sum32()%shardCount]
 }
 
+// Get retrieves a flag from the cache if it exists and has not expired.
 func (c *ShardedL1Cache) Get(key string) (*models.Flag, bool) {
 	s := c.getShard(key)
 	s.RLock()
@@ -125,6 +127,7 @@ func (c *ShardedL1Cache) Get(key string) (*models.Flag, bool) {
 	return item.flag, true
 }
 
+// Set adds or updates a flag in the cache with the given TTL.
 func (c *ShardedL1Cache) Set(key string, flag *models.Flag, ttl time.Duration) {
 	s := c.getShard(key)
 	s.Lock()
@@ -135,6 +138,7 @@ func (c *ShardedL1Cache) Set(key string, flag *models.Flag, ttl time.Duration) {
 	s.Unlock()
 }
 
+// Remove deletes a flag from the cache.
 func (c *ShardedL1Cache) Remove(key string) {
 	s := c.getShard(key)
 	s.Lock()

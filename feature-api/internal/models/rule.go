@@ -18,12 +18,18 @@ type Rule struct {
 type RuleType string
 
 const (
+	// RuleTypePercentage matches users based on a deterministic hash of their ID.
 	RuleTypePercentage RuleType = "percentage"
-	RuleTypeGeography  RuleType = "geography"
-	RuleTypeSchedule   RuleType = "schedule"
-	RuleTypeGradual    RuleType = "gradual"
-	RuleTypeUserList   RuleType = "user_list"
-	RuleTypeAttribute  RuleType = "attribute"
+	// RuleTypeGeography matches users based on location fields.
+	RuleTypeGeography RuleType = "geography"
+	// RuleTypeSchedule matches based on server-side time windows.
+	RuleTypeSchedule RuleType = "schedule"
+	// RuleTypeGradual matches based on a percentage that increases over time.
+	RuleTypeGradual RuleType = "gradual"
+	// RuleTypeUserList matches a specific list of user IDs.
+	RuleTypeUserList RuleType = "user_list"
+	// RuleTypeAttribute matches custom user attributes.
+	RuleTypeAttribute RuleType = "attribute"
 )
 
 // Clone returns a deep copy of the Rule to prevent concurrent mutation of cached slices.
