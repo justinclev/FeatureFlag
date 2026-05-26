@@ -66,6 +66,9 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
                     <option value="user_list">User List</option>
                     <option value="attribute">Attribute</option>
                     <option value="percentage">Percentage</option>
+                    <option value="geography">Geography (Location)</option>
+                    <option value="gradual">Gradual Rollout</option>
+                    <option value="schedule">Time Schedule</option>
                   </select>
                   <label class="switch-small">
                     <input type="checkbox" formControlName="value">
@@ -77,23 +80,92 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
                 
                 <div class="rule-config" [formGroupName]="'config'">
                   @if (rule.get('type')?.value === 'user_list') {
-                    <input formControlName="userIds" placeholder="User IDs (comma separated)">
+                    <div class="form-group no-margin">
+                      <label class="inner-label">User IDs</label>
+                      <input formControlName="userIds" placeholder="e.g. user-1, user-2 (comma separated)">
+                    </div>
                   }
                   @if (rule.get('type')?.value === 'attribute') {
                     <div class="attr-row">
-                      <input formControlName="attributeKey" placeholder="Key">
-                      <select formControlName="attributeOp">
-                        <option value="eq">Equals</option>
-                        <option value="neq">Not Equals</option>
-                        <option value="contains">Contains</option>
-                      </select>
-                      <input formControlName="attributeValue" placeholder="Value">
+                      <div class="inner-field">
+                        <label class="inner-label">Key</label>
+                        <input formControlName="attributeKey" placeholder="plan">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">Op</label>
+                        <select formControlName="attributeOp">
+                          <option value="eq">==</option>
+                          <option value="neq">!=</option>
+                          <option value="contains">contains</option>
+                          <option value="gt">></option>
+                          <option value="lt"><</option>
+                        </select>
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">Value</label>
+                        <input formControlName="attributeValue" placeholder="premium">
+                      </div>
                     </div>
                   }
                   @if (rule.get('type')?.value === 'percentage') {
                     <div class="range-group">
-                      <input type="range" formControlName="percentage" min="0" max="100">
-                      <span>{{ rule.get('config.percentage')?.value }}%</span>
+                      <label class="inner-label">Traffic Percentage</label>
+                      <div class="slider-val-row">
+                        <input type="range" formControlName="percentage" min="0" max="100" step="0.1">
+                        <span class="val-text">{{ rule.get('config.percentage')?.value }}%</span>
+                      </div>
+                    </div>
+                  }
+                  @if (rule.get('type')?.value === 'geography') {
+                    <div class="geo-grid">
+                      <div class="inner-field">
+                        <label class="inner-label">Countries</label>
+                        <input formControlName="countries" placeholder="US, CA, GB">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">Cities</label>
+                        <input formControlName="cities" placeholder="New York, London">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">States</label>
+                        <input formControlName="states" placeholder="NY, TX, CA">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">Zip Codes</label>
+                        <input formControlName="zipCodes" placeholder="10001, 90210">
+                      </div>
+                    </div>
+                  }
+                  @if (rule.get('type')?.value === 'gradual') {
+                    <div class="gradual-grid">
+                      <div class="inner-field">
+                        <label class="inner-label">Start %</label>
+                        <input type="number" formControlName="startPercent" min="0" max="100">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">End %</label>
+                        <input type="number" formControlName="endPercent" min="0" max="100">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">Start At</label>
+                        <input type="datetime-local" formControlName="startAt">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">End At</label>
+                        <input type="datetime-local" formControlName="endAt">
+                      </div>
+                    </div>
+                  }
+                  @if (rule.get('type')?.value === 'schedule') {
+                    <div class="schedule-grid">
+                      <div class="inner-field">
+                        <label class="inner-label">Enabled From</label>
+                        <input type="datetime-local" formControlName="enableAt">
+                      </div>
+                      <div class="inner-field">
+                        <label class="inner-label">Disabled From</label>
+                        <input type="datetime-local" formControlName="disableAt">
+                      </div>
                     </div>
                   }
                 </div>
@@ -119,6 +191,10 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
           <div class="form-group">
             <label>User ID</label>
             <input [(ngModel)]="testContext.userId" placeholder="e.g. user-123">
+          </div>
+          <div class="form-group">
+            <label>Country</label>
+            <input [(ngModel)]="testContext.country" placeholder="e.g. US">
           </div>
           <div class="form-group">
             <label>Attributes (JSON)</label>
@@ -207,7 +283,15 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
     .delete-btn:hover { color: var(--danger); }
     
     .attr-row { display: grid; grid-template-columns: 1fr 120px 1fr; gap: 8px; }
-    .range-group { display: flex; align-items: center; gap: 12px; }
+    .geo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .gradual-grid { display: grid; grid-template-columns: 80px 80px 1fr 1fr; gap: 8px; }
+    .schedule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .inner-field { display: flex; flex-direction: column; gap: 4px; }
+    .inner-label { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: #94a3b8; margin: 0; }
+    .no-margin { margin: 0; }
+    .range-group { display: flex; flex-direction: column; gap: 4px; }
+    .slider-val-row { display: flex; align-items: center; gap: 12px; }
+    .val-text { font-size: 0.875rem; font-weight: 600; min-width: 45px; color: var(--primary); }
 
     /* Switch styling */
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
@@ -290,13 +374,30 @@ export class FlagDetailComponent implements OnInit {
         attributeKey: [''],
         attributeOp: ['eq'],
         attributeValue: [''],
-        percentage: [50]
+        percentage: [50],
+        countries: [''],
+        cities: [''],
+        states: [''],
+        zipCodes: [''],
+        startPercent: [0],
+        endPercent: [100],
+        startAt: [''],
+        endAt: [''],
+        enableAt: [''],
+        disableAt: ['']
       })
     });
     this.rules.push(ruleForm);
   }
 
   removeRule(index: number) { this.rules.removeAt(index); }
+
+  private formatDateForInput(dateStr: string | undefined): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+  }
 
   patchFlag(flag: Flag) {
     this.flagForm.patchValue({
@@ -310,19 +411,26 @@ export class FlagDetailComponent implements OnInit {
     
     flag.rules?.forEach(r => {
       const config = { ...r.config };
-      if (r.type === 'user_list' && Array.isArray(config.userIds)) {
-        config.userIds = config.userIds.join(', ');
-      }
       
       const ruleForm = this.fb.group({
         type: [r.type],
         value: [r.value],
         config: this.fb.group({
-          userIds: [config.userIds || ''],
+          userIds: [(config.userIds || []).join(', ')],
           attributeKey: [config.attributeKey || ''],
           attributeOp: [config.attributeOp || 'eq'],
           attributeValue: [config.attributeValue || ''],
-          percentage: [config.percentage || 50]
+          percentage: [config.percentage || 50],
+          countries: [(config.countries || []).join(', ')],
+          cities: [(config.cities || []).join(', ')],
+          states: [(config.states || []).join(', ')],
+          zipCodes: [(config.zipCodes || []).join(', ')],
+          startPercent: [config.startPercent || 0],
+          endPercent: [config.endPercent || 100],
+          startAt: [this.formatDateForInput(config.startAt)],
+          endAt: [this.formatDateForInput(config.endAt)],
+          enableAt: [this.formatDateForInput(config.enableAt)],
+          disableAt: [this.formatDateForInput(config.disableAt)]
         })
       });
       this.rules.push(ruleForm);
@@ -336,14 +444,39 @@ export class FlagDetailComponent implements OnInit {
     const formVal = this.flagForm.value;
     const rules = formVal.rules.map((r: any) => {
       const config: any = {};
-      if (r.type === 'user_list') {
-        config.userIds = r.config.userIds.split(',').map((s: string) => s.trim()).filter((s: string) => s);
-      } else if (r.type === 'attribute') {
-        config.attributeKey = r.config.attributeKey;
-        config.attributeOp = r.config.attributeOp;
-        config.attributeValue = r.config.attributeValue;
-      } else if (r.type === 'percentage') {
-        config.percentage = parseFloat(r.config.percentage);
+      const c = r.config;
+
+      const split = (s: string) => (s || '').split(',').map(v => v.trim()).filter(v => v);
+      const toIso = (s: string) => s ? new Date(s).toISOString() : undefined;
+
+      switch (r.type) {
+        case 'user_list':
+          config.userIds = split(c.userIds);
+          break;
+        case 'attribute':
+          config.attributeKey = c.attributeKey;
+          config.attributeOp = c.attributeOp;
+          config.attributeValue = c.attributeValue;
+          break;
+        case 'percentage':
+          config.percentage = parseFloat(c.percentage);
+          break;
+        case 'geography':
+          config.countries = split(c.countries);
+          config.cities = split(c.cities);
+          config.states = split(c.states);
+          config.zipCodes = split(c.zipCodes);
+          break;
+        case 'gradual':
+          config.startPercent = parseFloat(c.startPercent);
+          config.endPercent = parseFloat(c.endPercent);
+          config.startAt = toIso(c.startAt);
+          config.endAt = toIso(c.endAt);
+          break;
+        case 'schedule':
+          config.enableAt = toIso(c.enableAt);
+          config.disableAt = toIso(c.disableAt);
+          break;
       }
       return { type: r.type, value: r.value, config };
     });
