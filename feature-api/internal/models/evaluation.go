@@ -12,7 +12,7 @@ type EvaluationContext struct {
 
 // EvaluationResult is the response returned to the client.
 type EvaluationResult struct {
-	Enabled  bool           `json:"enabled"`
-	Reason   string         `json:"reason"`
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Reason  string `json:"reason"`
 }
+

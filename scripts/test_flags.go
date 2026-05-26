@@ -36,7 +36,7 @@ func main() {
 		// 1. Default Flag (No Rules, Enabled=true, DefaultValue=true)
 		{
 			Name:          "Default Flag - Positive",
-			FlagKey:       "defaultFeatureFlag",
+			FlagKey:       "defaultfeatureflag",
 			Context:       EvalContext{},
 			ExpectedValue: true,
 			InputDesc:     "SENT: {} | RULE: No rules, Default=true",
@@ -45,7 +45,7 @@ func main() {
 		// 2. Attributes Flag (Market=US OR Product=Pro)
 		{
 			Name:    "Attributes Flag - Positive (Market)",
-			FlagKey: "attributesFeatureFlag",
+			FlagKey: "attributesfeatureflag",
 			Context: EvalContext{
 				Attributes: map[string]any{"Market": "US"},
 			},
@@ -54,7 +54,7 @@ func main() {
 		},
 		{
 			Name:    "Attributes Flag - Positive (Product)",
-			FlagKey: "attributesFeatureFlag",
+			FlagKey: "attributesfeatureflag",
 			Context: EvalContext{
 				Attributes: map[string]any{"Product": "Pro"},
 			},
@@ -63,7 +63,7 @@ func main() {
 		},
 		{
 			Name:    "Attributes Flag - Negative (Mismatch)",
-			FlagKey: "attributesFeatureFlag",
+			FlagKey: "attributesfeatureflag",
 			Context: EvalContext{
 				Attributes: map[string]any{"Market": "UK", "Product": "Basic"},
 			},
@@ -74,7 +74,7 @@ func main() {
 		// 3. User ID Flag (IDs: user-123, admin-99)
 		{
 			Name:    "User ID Flag - Positive",
-			FlagKey: "userFeatureFlag",
+			FlagKey: "userfeatureflag",
 			Context: EvalContext{
 				UserID: "user-123",
 			},
@@ -83,7 +83,7 @@ func main() {
 		},
 		{
 			Name:    "User ID Flag - Negative",
-			FlagKey: "userFeatureFlag",
+			FlagKey: "userfeatureflag",
 			Context: EvalContext{
 				UserID: "guest-user",
 			},

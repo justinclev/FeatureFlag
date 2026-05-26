@@ -175,17 +175,23 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
 
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" [disabled]="saving()">
-              {{ saving() ? 'Saving...' : 'Save Changes' }}
+              {{ saving() ? 'Saving...' : (isNew ? 'Create Flag' : 'Save Changes') }}
             </button>
             @if (!isNew) {
               <button type="button" class="btn btn-danger" (click)="delete()">Delete</button>
             }
           </div>
+          @if (saveSuccess()) {
+            <div class="save-success">✓ Flag saved successfully</div>
+          }
         </form>
       </div>
 
       <div class="test-section">
-        <h2>Try it out</h2>
+        <div class="test-header">
+          <h2>Try it out</h2>
+          <button class="btn-text" (click)="refreshTestJSON()">↺ Sync from rules</button>
+        </div>
         <div class="card">
           <p class="text-muted">Simulate evaluation with custom context.</p>
           <div class="form-group">
@@ -324,6 +330,31 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
     .res-fail strong { color: #991b1b; }
     .res-head { font-size: 0.75rem; margin-bottom: 4px; }
     .res-body { font-size: 0.875rem; color: var(--text-main); }
+    
+    .save-success {
+      margin-top: 12px;
+      padding: 8px;
+      background: #dcfce7;
+      color: #166534;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      text-align: center;
+      font-weight: 500;
+    }
+    .test-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--space-md);
+    }
+    .btn-text {
+      background: none;
+      color: var(--primary);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .btn-text:hover { opacity: 0.7; }
   `]
 })
 export class FlagDetailComponent implements OnInit {
@@ -331,8 +362,9 @@ export class FlagDetailComponent implements OnInit {
   flagId: string | null = null;
   flagForm: FormGroup;
   saving = signal(false);
+  saveSuccess = signal(false);
   
-  testContext: any = { userId: '', attributes: {} };
+  testContext: any = { userId: '', country: '', attributes: {} };
   testAttributes = '{}';
   testResult = signal<EvaluationResult | null>(null);
 
@@ -359,11 +391,36 @@ export class FlagDetailComponent implements OnInit {
       this.isNew = false;
       this.flagService.getFlag(this.flagId).subscribe(flag => {
         this.patchFlag(flag);
+        this.refreshTestJSON();
       });
     }
   }
 
   get rules() { return this.flagForm.get('rules') as FormArray; }
+
+  refreshTestJSON() {
+    const rules = this.flagForm.value.rules || [];
+    const context: any = { userId: '', country: '', attributes: {} };
+    
+    rules.forEach((r: any) => {
+      const c = r.config;
+      if (r.type === 'user_list' && c.userIds) {
+        const ids = (c.userIds || '').split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        if (ids.length > 0 && !context.userId) context.userId = ids[0];
+      }
+      if (r.type === 'geography' && c.countries) {
+        const countries = (c.countries || '').split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        if (countries.length > 0 && !context.country) context.country = countries[0];
+      }
+      if (r.type === 'attribute' && c.attributeKey) {
+        context.attributes[c.attributeKey] = c.attributeValue || 'test-value';
+      }
+    });
+
+    this.testContext.userId = context.userId || 'user-123';
+    this.testContext.country = context.country || 'US';
+    this.testAttributes = JSON.stringify(context.attributes, null, 2);
+  }
 
   addRule() {
     const ruleForm = this.fb.group({
@@ -488,7 +545,18 @@ export class FlagDetailComponent implements OnInit {
       : this.flagService.updateFlag(this.flagId!, flagData);
 
     obs.subscribe({
-      next: () => this.router.navigate(['/flags']),
+      next: (res: any) => {
+        this.saving.set(false);
+        this.saveSuccess.set(true);
+        setTimeout(() => this.saveSuccess.set(false), 3000);
+        
+        if (this.isNew && res.id) {
+          this.isNew = false;
+          this.flagId = res.id;
+          // Update URL without reloading to reflect existing ID
+          this.router.navigate(['/flags', res.id], { replaceUrl: true });
+        }
+      },
       error: (err) => {
         alert(err.error?.error || 'Failed to save flag');
         this.saving.set(false);

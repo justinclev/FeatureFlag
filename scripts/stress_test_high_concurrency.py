@@ -16,9 +16,9 @@ HEADERS = {
     "Connection": "keep-alive"
 }
 
-TOTAL_REQUESTS = 50000 
-CONCURRENCY_LIMIT = 3000  # Python starts choking above 2k tasks per process
-TIMEOUT_SECONDS = 30
+TOTAL_REQUESTS = 10000 
+CONCURRENCY_LIMIT = 500
+TIMEOUT_SECONDS = 10
 # ---------------------
 
 class StressStats:
@@ -116,19 +116,19 @@ async def main():
         try:
             async with session.get(API_URL) as resp:
                 flags = await resp.json()
-                flag_ids = [f["id"] for f in flags if f.get("enabled")]
+                flag_keys = [f["key"] for f in flags if f.get("enabled")]
         except Exception as e:
             print(f"Fetch fail: {e}")
             return
 
-        if not flag_ids:
+        if not flag_keys:
             print("No flags.")
             return
 
         stats = StressStats()
-        print(f"Slamming with {len(flag_ids)} flags...")
+        print(f"Slamming with {len(flag_keys)} flags...")
         
-        tasks = [worker(session, flag_ids, stats, payloads) for _ in range(CONCURRENCY_LIMIT)]
+        tasks = [worker(session, flag_keys, stats, payloads) for _ in range(CONCURRENCY_LIMIT)]
         await asyncio.gather(*tasks)
         stats.report_progress(force=True)
 

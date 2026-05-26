@@ -28,6 +28,9 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
             <div class="dot"></div>
             System Online
           </div>
+          <div class="build-info">
+            Build: 2026-05-25 21:58
+          </div>
         </div>
       </aside>
       <main class="content">
@@ -105,6 +108,12 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
       gap: 8px;
       font-size: 0.75rem;
       color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .build-info {
+      font-size: 0.6rem;
+      color: #475569;
+      font-family: monospace;
     }
     .dot {
       width: 8px;

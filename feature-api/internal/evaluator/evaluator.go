@@ -18,19 +18,13 @@ func New() *Evaluator {
 func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) models.EvaluationResult {
 	// Capture time once for the entire evaluation.
 	now := time.Now().UTC()
-	
-	// Principal optimization: Return the exact evaluation time in metadata
-	// to synchronize tests and client-side logging.
-	metadata := map[string]any{
-		"evaluatedAt": now.Format(time.RFC3339Nano),
-	}
 
 	if !flag.Enabled {
-		return models.EvaluationResult{Enabled: false, Reason: "flag disabled", Metadata: metadata}
+		return models.EvaluationResult{Enabled: false, Reason: "flag disabled"}
 	}
 
 	if len(flag.Rules) == 0 {
-		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)", Metadata: metadata}
+		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)"}
 	}
 
 	var result models.EvaluationResult
@@ -41,7 +35,6 @@ func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) mo
 		result = e.evaluateAny(flag, ctx, now)
 	}
 
-	result.Metadata = metadata
 	return result
 }
 

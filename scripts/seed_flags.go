@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -19,27 +20,29 @@ type Rule struct {
 }
 
 type CreateFlagRequest struct {
-	Key          string `json:"key"`
-	Name         string `json:"name"`
-	Enabled      bool   `json:"enabled"`
-	DefaultValue bool   `json:"defaultValue"`
-	Rules        []Rule `json:"rules"`
+	Key               string `json:"key"`
+	Name              string `json:"name"`
+	Enabled           bool   `json:"enabled"`
+	DefaultValue      bool   `json:"defaultValue"`
+	RuleMatchStrategy string `json:"ruleMatchStrategy,omitempty"`
+	Rules             []Rule `json:"rules"`
 }
 
 func main() {
 	flags := []CreateFlagRequest{
 		{
-			Key:          "defaultFeatureFlag",
+			Key:          "defaultfeatureflag",
 			Name:         "Default Flag (No Rules)",
 			Enabled:      true,
 			DefaultValue: true,
 			Rules:        []Rule{},
 		},
 		{
-			Key:          "attributesFeatureFlag",
-			Name:         "Attributes Flag (Market/Product)",
-			Enabled:      true,
-			DefaultValue: false,
+			Key:               "attributesfeatureflag",
+			Name:              "Attributes Flag (Market/Product)",
+			Enabled:           true,
+			DefaultValue:      false,
+			RuleMatchStrategy: "any",
 			Rules: []Rule{
 				{
 					Type: "attribute",
@@ -62,7 +65,7 @@ func main() {
 			},
 		},
 		{
-			Key:          "userFeatureFlag",
+			Key:          "userfeatureflag",
 			Name:         "User ID Flag",
 			Enabled:      true,
 			DefaultValue: false,
@@ -86,11 +89,26 @@ func main() {
 func createFlag(f CreateFlagRequest) {
 	fmt.Printf("Creating flag: %s...", f.Key)
 	
-	// Delete first to ensure clean state (ignore error if not found)
-	deleteReq, _ := http.NewRequest("DELETE", baseURL+"/"+f.Key, nil)
-	deleteReq.Header.Set("X-API-KEY", apiKey)
-	http.DefaultClient.Do(deleteReq)
+	// 1. Check if it exists and get ID
+	getReq, _ := http.NewRequest("GET", baseURL, nil)
+	getReq.Header.Set("X-API-KEY", apiKey)
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err == nil {
+		defer getResp.Body.Close()
+		var flags []struct { ID string `json:"id"`; Key string `json:"key"` }
+		json.NewDecoder(getResp.Body).Decode(&flags)
+		for _, existing := range flags {
+			if strings.EqualFold(existing.Key, f.Key) {
+				// Delete by ID
+				delReq, _ := http.NewRequest("DELETE", baseURL+"/"+existing.ID, nil)
+				delReq.Header.Set("X-API-KEY", apiKey)
+				http.DefaultClient.Do(delReq)
+				break
+			}
+		}
+	}
 
+	// 2. Create
 	body, _ := json.Marshal(f)
 	req, _ := http.NewRequest("POST", baseURL, bytes.NewBuffer(body))
 	req.Header.Set("X-API-KEY", apiKey)

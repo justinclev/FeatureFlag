@@ -268,13 +268,8 @@ def main():
                 actual_enabled = data.get("enabled")
                 actual_reason = data.get("reason")
                 
-                metadata = data.get("metadata", {})
-                server_now_raw = metadata.get("evaluatedAt")
-                server_now = None
-                if server_now_raw:
-                    server_now = datetime.fromisoformat(server_now_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
-                
-                expected_enabled, exp_reason = predict_evaluation(flag, context, server_now)
+                # Predict locally using UTC now
+                expected_enabled, exp_reason = predict_evaluation(flag, context, datetime.now(timezone.utc))
             else:
                 actual_enabled = "ERR"
                 expected_enabled = "FAIL"

@@ -36,14 +36,14 @@ type Scenario struct {
 func main() {
 	scenarios := []Scenario{
 		// positive
-		{"Attr-US-Pos", "attributesFeatureFlag", EvalContext{Attributes: map[string]any{"Market": "US"}}, true},
-		{"Attr-Pro-Pos", "attributesFeatureFlag", EvalContext{Attributes: map[string]any{"Product": "Pro"}}, true},
-		{"User-123-Pos", "userFeatureFlag", EvalContext{UserID: "user-123"}, true},
-		{"Default-Pos", "defaultFeatureFlag", EvalContext{}, true},
+		{"Attr-US-Pos", "attributesfeatureflag", EvalContext{Attributes: map[string]any{"Market": "US"}}, true},
+		{"Attr-Pro-Pos", "attributesfeatureflag", EvalContext{Attributes: map[string]any{"Product": "Pro"}}, true},
+		{"User-123-Pos", "userfeatureflag", EvalContext{UserID: "user-123"}, true},
+		{"Default-Pos", "defaultfeatureflag", EvalContext{}, true},
 		
 		// negative
-		{"Attr-Neg", "attributesFeatureFlag", EvalContext{Attributes: map[string]any{"Market": "UK", "Product": "Free"}}, false},
-		{"User-Neg", "userFeatureFlag", EvalContext{UserID: "random-user"}, false},
+		{"Attr-Neg", "attributesfeatureflag", EvalContext{Attributes: map[string]any{"Market": "UK", "Product": "Free"}}, false},
+		{"User-Neg", "userfeatureflag", EvalContext{UserID: "random-user"}, false},
 		{"Missing-Neg", "NoFlagFlag", EvalContext{}, false},
 	}
 
