@@ -343,17 +343,20 @@ func TestEvaluate_Percentage_MissingUserID(t *testing.T) {
 	}
 }
 
-func TestEvaluate_MultipleMatches_FirstWins(t *testing.T) {
+func TestEvaluate_MultipleMatches_DenyWins(t *testing.T) {
 	rule1 := ruleWith(models.RuleTypeUserList, map[string]any{"userIds": []any{"user-1"}}, true)
-	rule2 := ruleWith(models.RuleTypeUserList, map[string]any{"userIds": []any{"user-1"}}, false)
-	flag := flagWith([]models.Rule{rule1, rule2}, false, true)
-	
-	result := eval.Evaluate(&flag, models.EvaluationContext{UserID: "user-1"})
-	if !result.Enabled || result.Reason != "matched rule: user_list" {
-		t.Errorf("expected first rule to win, got %v", result)
+	rule2 := ruleWith(models.RuleTypeAttribute, map[string]any{"attributeKey": "k", "attributeOp": "eq", "attributeValue": "v"}, true)
+	rule3 := ruleWith(models.RuleTypeUserList, map[string]any{"userIds": []any{"user-1"}}, false)
+	flag := flagWith([]models.Rule{rule1, rule2, rule3}, false, true)
+
+	result := eval.Evaluate(&flag, models.EvaluationContext{
+		UserID: "user-1",
+		Attributes: map[string]any{"k": "v"},
+	})
+	if result.Enabled || result.Reason != "matched rule (deny): user_list" {
+		t.Errorf("expected deny rule to win over multiple permit rules, got %v", result)
 	}
 }
-
 func TestEvaluate_UnknownRuleType(t *testing.T) {
 	rule := ruleWith("unknown", nil, true)
 	flag := flagWith([]models.Rule{rule}, false, true) // defaultValue = false

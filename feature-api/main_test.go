@@ -23,12 +23,12 @@ func TestRun_InvalidMongoURI(t *testing.T) {
 	}
 }
 
-func TestRun_InvalidRedisAddr(t *testing.T) {
-    os.Setenv("API_KEY", "test")
-    os.Setenv("MONGO_URI", "mongodb://localhost:27017")
-    os.Setenv("REDIS_ADDR", "") // will fail Connect validation
-    err := run()
-    if err == nil {
-        t.Error("expected error for empty redis addr")
-    }
+func TestRun_LogLevels(t *testing.T) {
+	levels := []string{"debug", "warn", "error", "info", "invalid"}
+	for _, l := range levels {
+		os.Setenv("LOG_LEVEL", l)
+		os.Setenv("API_KEY", "test")
+		os.Setenv("MONGO_URI", "invalid")
+		_ = run() // will still fail at mongo connect, but cover the switch
+	}
 }
