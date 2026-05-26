@@ -1,4 +1,5 @@
 export const environment = {
 	production: true,
-	apiUrl: "http://feature-api:8080",
+	apiUrl: "http://localhost:8081/api",
+	apiKey: "test-api-key",
 };

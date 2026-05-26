@@ -64,12 +64,12 @@ func run() error {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	// Middleware chain: Recovery -> BodyLimit -> Auth -> CORS -> Logging
+	// Middleware chain: Recovery -> BodyLimit -> CORS -> Auth -> Logging
 	handler := middleware.Chain(mux,
 		middleware.Recovery(logger),
 		middleware.BodyLimit(1<<20), // 1MB
-		middleware.APIKeyAuth(cfg.APIKey, logger),
 		middleware.CORS(cfg.CORSAllowedOrigin),
+		middleware.APIKeyAuth(cfg.APIKey, logger),
 		middleware.Logging(logger),
 	)
 
