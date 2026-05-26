@@ -45,30 +45,38 @@ def get_config(cfg, key):
 
 def predict_evaluation(flag, context, server_now=None):
     """Local implementation of evaluation logic matching Go backend exactly."""
+    now = server_now if server_now else datetime.now(timezone.utc)
+
     if not flag.get("enabled", True):
-        return False, "flag disabled"
+        return flag.get("offValue", False), "flag disabled"
     
     rules = flag.get("rules", [])
     if not rules:
-        return flag.get("defaultValue", False), "default value (no rules)"
+        return flag.get("fallthroughValue", False), "fallthrough value (no rules)"
 
     strategy = flag.get("ruleMatchStrategy", "any")
 
     if strategy == "all":
-        last_value = False
         for rule in rules:
-            matched, value = eval_rule(rule, flag.get("key"), context, server_now)
+            matched, _ = eval_rule(rule, flag.get("key"), context, now)
             if not matched:
-                return flag.get("defaultValue", False), f"failed rule: {rule.get('type')}"
-            last_value = value
-        return last_value, "matched all rules"
+                return flag.get("fallthroughValue", False), f"failed rule: {rule.get('type')}"
+        # All matched. Consistency ensured by API validation.
+        return rules[0].get("value", False), "matched all rules"
     else:
-        # Default: ANY
+        # Strategy: ANY (Deny Wins)
+        has_true_match = False
         for rule in rules:
-            matched, value = eval_rule(rule, flag.get("key"), context, server_now)
+            matched, value = eval_rule(rule, flag.get("key"), context, now)
             if matched:
-                return value, f"matched rule: {rule.get('type')}"
-        return flag.get("defaultValue", False), "default value"
+                if not value:
+                    return False, f"matched rule (deny): {rule.get('type')}"
+                has_true_match = True
+        
+        if has_true_match:
+            return True, "matched rule (permit)"
+            
+        return flag.get("fallthroughValue", False), "fallthrough value"
 
 def eval_rule(rule, flag_key, ctx, server_now=None):
     rtype = rule.get("type")

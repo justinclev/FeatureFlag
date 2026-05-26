@@ -22,7 +22,8 @@ type Flag struct {
 	Name               string            `bson:"name"              json:"name"`
 	Description        string            `bson:"description"       json:"description"`
 	Key                string            `bson:"key"               json:"key"`
-	DefaultValue       bool              `bson:"defaultValue"      json:"defaultValue"`
+	OffValue           bool              `bson:"offValue"          json:"offValue"`
+	FallthroughValue   bool              `bson:"fallthroughValue"  json:"fallthroughValue"`
 	Rules              []Rule            `bson:"rules"             json:"rules"`
 	RuleMatchStrategy  RuleMatchStrategy `bson:"ruleMatchStrategy" json:"ruleMatchStrategy"`
 	CreatedAt          time.Time         `bson:"createdAt"         json:"createdAt"`
@@ -53,7 +54,8 @@ type CreateFlagRequest struct {
 	Name               string            `json:"name"`
 	Enabled            bool              `json:"enabled"`
 	Description        string            `json:"description"`
-	DefaultValue       bool              `json:"defaultValue"`
+	OffValue           bool              `json:"offValue"`
+	FallthroughValue   bool              `json:"fallthroughValue"`
 	Rules              []Rule            `json:"rules"`
 	RuleMatchStrategy  RuleMatchStrategy `json:"ruleMatchStrategy"`
 	CreatedBy          string            `json:"createdBy"`
@@ -65,7 +67,8 @@ type UpdateFlagRequest struct {
 	Name               *string            `json:"name,omitempty"`
 	Enabled            *bool              `json:"enabled,omitempty"`
 	Description        *string            `json:"description,omitempty"`
-	DefaultValue       *bool              `json:"defaultValue,omitempty"`
+	OffValue           *bool              `json:"offValue,omitempty"`
+	FallthroughValue   *bool              `json:"fallthroughValue,omitempty"`
 	Rules              *[]Rule            `json:"rules,omitempty"`
 	RuleMatchStrategy  *RuleMatchStrategy `json:"ruleMatchStrategy,omitempty"`
 	UpdatedBy          string             `json:"updatedBy"`

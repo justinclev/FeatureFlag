@@ -301,7 +301,8 @@ func (r *MongoRedisRepository) Create(ctx context.Context, req models.CreateFlag
 		Key:               cleanKey,
 		Enabled:           req.Enabled,
 		Description:       req.Description,
-		DefaultValue:      req.DefaultValue,
+		OffValue:          req.OffValue,
+		FallthroughValue:  req.FallthroughValue,
 		Rules:             req.Rules,
 		RuleMatchStrategy: req.RuleMatchStrategy,
 		CreatedBy:         req.CreatedBy,
@@ -361,11 +362,14 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	if req.Enabled != nil {
 		fields["enabled"] = *req.Enabled
 	}
+	if req.OffValue != nil {
+		fields["offValue"] = *req.OffValue
+	}
+	if req.FallthroughValue != nil {
+		fields["fallthroughValue"] = *req.FallthroughValue
+	}
 	if req.Description != nil {
 		fields["description"] = *req.Description
-	}
-	if req.DefaultValue != nil {
-		fields["defaultValue"] = *req.DefaultValue
 	}
 	if req.Rules != nil {
 		fields["rules"] = *req.Rules

@@ -26,7 +26,8 @@ type CreateFlagRequest struct {
 	Key               string `json:"key"`
 	Name              string `json:"name"`
 	Enabled           bool   `json:"enabled"`
-	DefaultValue      bool   `json:"defaultValue"`
+	OffValue          bool   `json:"offValue"`
+	FallthroughValue  bool   `json:"fallthroughValue"`
 	RuleMatchStrategy string `json:"ruleMatchStrategy"`
 	Rules             []Rule `json:"rules"`
 }
@@ -93,7 +94,8 @@ func testAllStrategyUpdateValidation(rules []Rule, suffix string) {
 		Key:               key,
 		Name:              "Update Validation Test",
 		Enabled:           true,
-		DefaultValue:      true,
+		OffValue:          true,
+		FallthroughValue:  true,
 		RuleMatchStrategy: "all",
 		Rules:             validRules,
 	}
@@ -152,7 +154,8 @@ func testAllStrategyValidation(rules []Rule, suffix string) {
 		Key:               key,
 		Name:              "Conflict Test All Validation",
 		Enabled:           true,
-		DefaultValue:      true,
+		OffValue:          true,
+		FallthroughValue:  true,
 		RuleMatchStrategy: "all",
 		Rules:             rules,
 	}
@@ -185,7 +188,8 @@ func runScenario(strategy string, rules []Rule, ctx EvalContext, suffix string) 
 		Key:               key,
 		Name:              "Conflict Test " + strategy,
 		Enabled:           true,
-		DefaultValue:      true, // Different from both rules to see if it falls through
+		OffValue:          true,
+		FallthroughValue:  true, // Different from both rules to see if it falls through
 		RuleMatchStrategy: strategy,
 		Rules:             rules,
 	}

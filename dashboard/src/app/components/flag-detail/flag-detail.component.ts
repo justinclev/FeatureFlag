@@ -17,160 +17,178 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
           <h1>{{ isNew ? 'Create' : 'Edit' }} Feature Flag</h1>
         </div>
 
-        <form [formGroup]="flagForm" (ngSubmit)="save()" class="card">
-          <div class="form-group">
-            <label>Name</label>
-            <input formControlName="name" placeholder="e.g. New Beta Feature">
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Key</label>
-              <input formControlName="key" placeholder="e.g. new-beta-feature">
+        <form [formGroup]="flagForm" (ngSubmit)="save()">
+          <!-- Section 1: Identity -->
+          <div class="card mb-lg">
+            <div class="section-title">
+              <span class="step-badge">1</span>
+              <h3>Identity & Strategy</h3>
             </div>
             <div class="form-group">
-              <label>Strategy</label>
-              <select formControlName="ruleMatchStrategy">
-                <option value="any">ANY (OR)</option>
-                <option value="all">ALL (AND)</option>
-              </select>
+              <label>Flag Name</label>
+              <input formControlName="name" placeholder="e.g. New Beta Feature">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Key</label>
+                <input formControlName="key" placeholder="e.g. new-beta-feature">
+              </div>
+              <div class="form-group">
+                <label>Rule Match Strategy</label>
+                <select formControlName="ruleMatchStrategy">
+                  <option value="any">ANY (Short-circuit / Deny Wins)</option>
+                  <option value="all">ALL (Must match every rule)</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div class="form-group checkbox-group">
-            <label class="switch">
-              <input type="checkbox" formControlName="enabled">
-              <span class="slider round"></span>
-            </label>
-            <span>Enabled</span>
-          </div>
-
-          <div class="form-group checkbox-group">
-            <label class="switch">
-              <input type="checkbox" formControlName="defaultValue">
-              <span class="slider round"></span>
-            </label>
-            <span>Default Value (when no rules match)</span>
-          </div>
-
-          <div class="rules-header">
-            <h3>Rules</h3>
-            <button type="button" class="btn btn-sm" (click)="addRule()">+ Add Rule</button>
-          </div>
-
-          <div formArrayName="rules" class="rules-list">
-            @for (rule of rules.controls; track $index) {
-              <div [formGroupName]="$index" class="rule-item">
-                <div class="rule-top">
-                  <select formControlName="type">
-                    <option value="user_list">User List</option>
-                    <option value="attribute">Attribute</option>
-                    <option value="percentage">Percentage</option>
-                    <option value="geography">Geography (Location)</option>
-                    <option value="gradual">Gradual Rollout</option>
-                    <option value="schedule">Time Schedule</option>
-                  </select>
-                  <label class="switch-small">
-                    <input type="checkbox" formControlName="value">
-                    <span class="slider-small round"></span>
-                  </label>
-                  <span class="rule-val-label">{{ rule.get('value')?.value ? 'Permit' : 'Deny' }}</span>
-                  <button type="button" class="btn-icon delete-btn" (click)="removeRule($index)">×</button>
-                </div>
-                
-                <div class="rule-config" [formGroupName]="'config'">
-                  @if (rule.get('type')?.value === 'user_list') {
-                    <div class="form-group no-margin">
-                      <label class="inner-label">User IDs</label>
-                      <input formControlName="userIds" placeholder="e.g. user-1, user-2 (comma separated)">
-                    </div>
-                  }
-                  @if (rule.get('type')?.value === 'attribute') {
-                    <div class="attr-row">
-                      <div class="inner-field">
-                        <label class="inner-label">Key</label>
-                        <input formControlName="attributeKey" placeholder="plan">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">Op</label>
-                        <select formControlName="attributeOp">
-                          <option value="eq">==</option>
-                          <option value="neq">!=</option>
-                          <option value="contains">contains</option>
-                          <option value="gt">></option>
-                          <option value="lt"><</option>
-                        </select>
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">Value</label>
-                        <input formControlName="attributeValue" placeholder="premium">
-                      </div>
-                    </div>
-                  }
-                  @if (rule.get('type')?.value === 'percentage') {
-                    <div class="range-group">
-                      <label class="inner-label">Traffic Percentage</label>
-                      <div class="slider-val-row">
-                        <input type="range" formControlName="percentage" min="0" max="100" step="0.1">
-                        <span class="val-text">{{ rule.get('config.percentage')?.value }}%</span>
-                      </div>
-                    </div>
-                  }
-                  @if (rule.get('type')?.value === 'geography') {
-                    <div class="geo-grid">
-                      <div class="inner-field">
-                        <label class="inner-label">Countries</label>
-                        <input formControlName="countries" placeholder="US, CA, GB">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">Cities</label>
-                        <input formControlName="cities" placeholder="New York, London">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">States</label>
-                        <input formControlName="states" placeholder="NY, TX, CA">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">Zip Codes</label>
-                        <input formControlName="zipCodes" placeholder="10001, 90210">
-                      </div>
-                    </div>
-                  }
-                  @if (rule.get('type')?.value === 'gradual') {
-                    <div class="gradual-grid">
-                      <div class="inner-field">
-                        <label class="inner-label">Start %</label>
-                        <input type="number" formControlName="startPercent" min="0" max="100">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">End %</label>
-                        <input type="number" formControlName="endPercent" min="0" max="100">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">Start At</label>
-                        <input type="datetime-local" formControlName="startAt">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">End At</label>
-                        <input type="datetime-local" formControlName="endAt">
-                      </div>
-                    </div>
-                  }
-                  @if (rule.get('type')?.value === 'schedule') {
-                    <div class="schedule-grid">
-                      <div class="inner-field">
-                        <label class="inner-label">Enabled From</label>
-                        <input type="datetime-local" formControlName="enableAt">
-                      </div>
-                      <div class="inner-field">
-                        <label class="inner-label">Disabled From</label>
-                        <input type="datetime-local" formControlName="disableAt">
-                      </div>
-                    </div>
-                  }
+          <!-- Section 2: Safety & Master Switch -->
+          <div class="card mb-lg highlight-card" [ngClass]="{'card-off': !flagForm.get('enabled')?.value}">
+            <div class="section-title">
+              <span class="step-badge">2</span>
+              <h3>Master Control & Safety</h3>
+            </div>
+            <div class="control-grid">
+              <div class="control-item">
+                <label class="switch-large">
+                  <input type="checkbox" formControlName="enabled">
+                  <span class="slider-large round"></span>
+                </label>
+                <div class="label-group">
+                  <span class="control-label">{{ flagForm.get('enabled')?.value ? 'ENABLED' : 'DISABLED' }}</span>
+                  <span class="text-xs text-muted">Master toggle for this feature flag.</span>
                 </div>
               </div>
-            }
+              <div class="control-item">
+                <label class="switch">
+                  <input type="checkbox" formControlName="offValue">
+                  <span class="slider round"></span>
+                </label>
+                <div class="label-group">
+                  <span class="font-medium">Off Value</span>
+                  <span class="text-xs text-muted">Constant value returned when master toggle is OFF.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Targeting (Only if enabled) -->
+          <div class="card" [ngClass]="{'dimmed': !flagForm.get('enabled')?.value}">
+            <div class="section-title">
+              <span class="step-badge">3</span>
+              <h3>Targeting Rules</h3>
+              @if (!flagForm.get('enabled')?.value) {
+                <span class="pill pill-muted ml-auto">Inactive</span>
+              }
+            </div>
+            
+            <div class="rules-container">
+              <div formArrayName="rules" class="rules-list">
+                @for (rule of rules.controls; track $index) {
+                  <div [formGroupName]="$index" class="rule-item">
+                    <!-- ... existing rule item content ... -->
+                    <div class="rule-top">
+                      <select formControlName="type">
+                        <option value="user_list">User List</option>
+                        <option value="attribute">Attribute</option>
+                        <option value="percentage">Percentage</option>
+                        <option value="geography">Geography</option>
+                        <option value="gradual">Gradual Rollout</option>
+                        <option value="schedule">Time Schedule</option>
+                      </select>
+                      <label class="switch-small">
+                        <input type="checkbox" formControlName="value">
+                        <span class="slider-small round"></span>
+                      </label>
+                      <span class="rule-val-label">{{ rule.get('value')?.value ? 'Permit' : 'Deny' }}</span>
+                      <button type="button" class="btn-icon delete-btn" (click)="removeRule($index)">×</button>
+                    </div>
+                    
+                    <div class="rule-config" [formGroupName]="'config'">
+                      <!-- ... rule inputs same as before ... -->
+                      @if (rule.get('type')?.value === 'user_list') {
+                        <div class="form-group no-margin">
+                          <label class="inner-label">User IDs</label>
+                          <input formControlName="userIds" placeholder="e.g. user-1, user-2">
+                        </div>
+                      }
+                      @if (rule.get('type')?.value === 'attribute') {
+                        <div class="attr-row">
+                          <div class="inner-field">
+                            <label class="inner-label">Key</label>
+                            <input formControlName="attributeKey" placeholder="plan">
+                          </div>
+                          <div class="inner-field">
+                            <label class="inner-label">Op</label>
+                            <select formControlName="attributeOp">
+                              <option value="eq">==</option>
+                              <option value="neq">!=</option>
+                              <option value="contains">contains</option>
+                              <option value="gt">></option>
+                              <option value="lt"><</option>
+                            </select>
+                          </div>
+                          <div class="inner-field">
+                            <label class="inner-label">Value</label>
+                            <input formControlName="attributeValue" placeholder="premium">
+                          </div>
+                        </div>
+                      }
+                      @if (rule.get('type')?.value === 'percentage') {
+                        <div class="range-group">
+                          <label class="inner-label">Traffic %</label>
+                          <div class="slider-val-row">
+                            <input type="range" formControlName="percentage" min="0" max="100" step="0.1">
+                            <span class="val-text">{{ rule.get('config.percentage')?.value }}%</span>
+                          </div>
+                        </div>
+                      }
+                      @if (rule.get('type')?.value === 'geography') {
+                        <div class="geo-grid">
+                          <div class="inner-field"><label class="inner-label">Countries</label><input formControlName="countries"></div>
+                          <div class="inner-field"><label class="inner-label">Cities</label><input formControlName="cities"></div>
+                        </div>
+                      }
+                      @if (rule.get('type')?.value === 'gradual') {
+                        <div class="gradual-grid">
+                          <div class="inner-field"><label class="inner-label">Start %</label><input type="number" formControlName="startPercent"></div>
+                          <div class="inner-field"><label class="inner-label">End %</label><input type="number" formControlName="endPercent"></div>
+                        </div>
+                      }
+                      @if (rule.get('type')?.value === 'schedule') {
+                        <div class="schedule-grid">
+                          <div class="inner-field"><label class="inner-label">From</label><input type="datetime-local" formControlName="enableAt"></div>
+                          <div class="inner-field"><label class="inner-label">To</label><input type="datetime-local" formControlName="disableAt"></div>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                } @empty {
+                  <div class="empty-rules">
+                    <p>No targeting rules defined.</p>
+                  </div>
+                }
+                <button type="button" class="btn btn-outline btn-block mt-md" (click)="addRule()">+ Add Targeting Rule</button>
+              </div>
+
+              <!-- Fallthrough (The "Else") -->
+              <div class="fallthrough-box">
+                <div class="decision-arrow">↓</div>
+                <div class="fallthrough-content">
+                  <div class="control-item">
+                    <label class="switch">
+                      <input type="checkbox" formControlName="fallthroughValue">
+                      <span class="slider round"></span>
+                    </label>
+                    <div class="label-group">
+                      <span class="font-medium">Fallthrough Value (Default Rule)</span>
+                      <span class="text-xs text-muted">Value returned if the flag is ENABLED but NO rules above match.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="form-actions">
@@ -198,9 +216,25 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
             <label>User ID</label>
             <input [(ngModel)]="testContext.userId" placeholder="e.g. user-123">
           </div>
-          <div class="form-group">
-            <label>Country</label>
-            <input [(ngModel)]="testContext.country" placeholder="e.g. US">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Country</label>
+              <input [(ngModel)]="testContext.country" placeholder="e.g. US">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <input [(ngModel)]="testContext.state" placeholder="e.g. NY">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>City</label>
+              <input [(ngModel)]="testContext.city" placeholder="e.g. New York">
+            </div>
+            <div class="form-group">
+              <label>Zip Code</label>
+              <input [(ngModel)]="testContext.zipCode" placeholder="e.g. 10001">
+            </div>
           </div>
           <div class="form-group">
             <label>Attributes (JSON)</label>
@@ -251,8 +285,13 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
     .checkbox-group {
       display: flex;
       align-items: center;
-      gap: var(--space-sm);
+      gap: var(--space-md);
       margin-top: var(--space-md);
+    }
+    .switch-label-group {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
     }
     .rules-header {
       display: flex;
@@ -328,33 +367,75 @@ import { Flag, Rule, EvaluationResult } from '../../models/flag.model';
     .res-success strong { color: #166534; }
     .res-fail { background: #fef2f2; border-color: var(--danger); }
     .res-fail strong { color: #991b1b; }
-    .res-head { font-size: 0.75rem; margin-bottom: 4px; }
-    .res-body { font-size: 0.875rem; color: var(--text-main); }
-    
-    .save-success {
-      margin-top: 12px;
-      padding: 8px;
-      background: #dcfce7;
-      color: #166534;
-      border-radius: 4px;
-      font-size: 0.875rem;
-      text-align: center;
-      font-weight: 500;
-    }
-    .test-header {
+    /* Section Styles */
+    .section-title {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: var(--space-md);
+      gap: 12px;
+      margin-bottom: var(--space-lg);
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 12px;
     }
-    .btn-text {
-      background: none;
-      color: var(--primary);
+    .section-title h3 { font-size: 1rem; margin: 0; }
+    .step-badge {
+      background: #e2e8f0;
+      color: #475569;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
       font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
+      font-weight: 700;
     }
-    .btn-text:hover { opacity: 0.7; }
+
+    .highlight-card { border: 1px solid #bfdbfe; background: #eff6ff; }
+    .card-off { border: 1px solid #fee2e2; background: #fff1f2; }
+    .dimmed { opacity: 0.6; filter: grayscale(0.5); pointer-events: none; }
+    .dimmed .pill-muted { opacity: 1; }
+
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .control-item { display: flex; align-items: center; gap: var(--space-md); }
+    .label-group { display: flex; flex-direction: column; line-height: 1.3; }
+    .control-label { font-weight: 800; font-size: 1.1rem; color: var(--text-main); letter-spacing: 0.05em; }
+
+    .rules-container { padding-left: 36px; border-left: 2px dashed #e2e8f0; margin-left: 12px; }
+    .empty-rules { padding: var(--space-md); background: #f8fafc; border-radius: 6px; text-align: center; color: var(--text-muted); font-size: 0.875rem; }
+    
+    .fallthrough-box { margin-top: 2rem; position: relative; }
+    .decision-arrow {
+      position: absolute;
+      left: -48px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.5rem;
+      color: #cbd5e1;
+      font-weight: bold;
+    }
+    .fallthrough-content {
+      background: #f8fafc;
+      padding: var(--space-md);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .mb-lg { margin-bottom: var(--space-lg); }
+    .ml-auto { margin-left: auto; }
+    .mt-md { margin-top: var(--space-md); }
+    .btn-block { width: 100%; }
+    .btn-outline { background: white; border: 1px solid var(--primary); color: var(--primary); }
+    .btn-outline:hover { background: #f0f7ff; }
+
+    /* Switch Styling */
+    .switch-large { position: relative; display: inline-block; width: 60px; height: 32px; }
+    .switch-large input { opacity: 0; width: 0; height: 0; }
+    .slider-large { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .4s; }
+    .slider-large:before { position: absolute; content: ""; height: 24px; width: 24px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
+    input:checked + .slider-large { background-color: var(--success); }
+    input:checked + .slider-large:before { transform: translateX(28px); }
+    .slider-large.round { border-radius: 34px; }
+    .slider-large.round:before { border-radius: 50%; }
   `]
 })
 export class FlagDetailComponent implements OnInit {
@@ -364,7 +445,7 @@ export class FlagDetailComponent implements OnInit {
   saving = signal(false);
   saveSuccess = signal(false);
   
-  testContext: any = { userId: '', country: '', attributes: {} };
+  testContext: any = { userId: '', country: '', state: '', city: '', zipCode: '', attributes: {} };
   testAttributes = '{}';
   testResult = signal<EvaluationResult | null>(null);
 
@@ -379,7 +460,8 @@ export class FlagDetailComponent implements OnInit {
       key: ['', Validators.required],
       description: [''],
       enabled: [true],
-      defaultValue: [false],
+      offValue: [false],
+      fallthroughValue: [false],
       ruleMatchStrategy: ['any'],
       rules: this.fb.array([])
     });
@@ -400,7 +482,7 @@ export class FlagDetailComponent implements OnInit {
 
   refreshTestJSON() {
     const rules = this.flagForm.value.rules || [];
-    const context: any = { userId: '', country: '', attributes: {} };
+    const context: any = { userId: '', country: '', state: '', city: '', zipCode: '', attributes: {} };
     
     rules.forEach((r: any) => {
       const c = r.config;
@@ -408,9 +490,17 @@ export class FlagDetailComponent implements OnInit {
         const ids = (c.userIds || '').split(',').map((s: string) => s.trim()).filter((s: string) => s);
         if (ids.length > 0 && !context.userId) context.userId = ids[0];
       }
-      if (r.type === 'geography' && c.countries) {
-        const countries = (c.countries || '').split(',').map((s: string) => s.trim()).filter((s: string) => s);
+      if (r.type === 'geography') {
+        const split = (val: string) => (val || '').split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        const countries = split(c.countries);
+        const states = split(c.states);
+        const cities = split(c.cities);
+        const zips = split(c.zipCodes);
+
         if (countries.length > 0 && !context.country) context.country = countries[0];
+        if (states.length > 0 && !context.state) context.state = states[0];
+        if (cities.length > 0 && !context.city) context.city = cities[0];
+        if (zips.length > 0 && !context.zipCode) context.zipCode = zips[0];
       }
       if (r.type === 'attribute' && c.attributeKey) {
         context.attributes[c.attributeKey] = c.attributeValue || 'test-value';
@@ -419,6 +509,9 @@ export class FlagDetailComponent implements OnInit {
 
     this.testContext.userId = context.userId || 'user-123';
     this.testContext.country = context.country || 'US';
+    this.testContext.state = context.state || '';
+    this.testContext.city = context.city || '';
+    this.testContext.zipCode = context.zipCode || '';
     this.testAttributes = JSON.stringify(context.attributes, null, 2);
   }
 
@@ -462,7 +555,8 @@ export class FlagDetailComponent implements OnInit {
       key: flag.key,
       description: flag.description,
       enabled: flag.enabled,
-      defaultValue: flag.defaultValue,
+      offValue: flag.offValue,
+      fallthroughValue: flag.fallthroughValue,
       ruleMatchStrategy: flag.ruleMatchStrategy
     });
     

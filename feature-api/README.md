@@ -49,14 +49,15 @@ Flags support two strategies for evaluating multiple rules via the "ruleMatchStr
 {
   "key": "strict-feature",
   "ruleMatchStrategy": "all",
-  "defaultValue": false,
+  "offValue": false,
+  "fallthroughValue": false,
   "rules": [
     { "type": "geography", "config": { "countries": ["US"] }, "value": true },
     { "type": "attribute", "config": { "attributeKey": "beta", "attributeOp": "eq", "attributeValue": "true" }, "value": true }
   ]
 }
 ```
-*(Only returns "true" if user is in US **AND** has beta=true attribute. If either fails, returns `defaultValue`.)*
+*(Only returns "true" if user is in US **AND** has beta=true attribute. If either fails, returns `fallthroughValue`.)*
 
 ---
 
@@ -75,7 +76,8 @@ Buckets users based on a deterministic hash of their "userId".
   "key": "new-ui",
   "name": "New UI Layout",
   "enabled": true,
-  "defaultValue": false,
+  "offValue": false,
+  "fallthroughValue": false,
   "ruleMatchStrategy": "any",
   "rules": [
     { "type": "percentage", "config": { "percentage": 10.5 }, "value": true }

@@ -23,7 +23,8 @@ type CreateFlagRequest struct {
 	Key               string `json:"key"`
 	Name              string `json:"name"`
 	Enabled           bool   `json:"enabled"`
-	DefaultValue      bool   `json:"defaultValue"`
+	OffValue          bool   `json:"offValue"`
+	FallthroughValue  bool   `json:"fallthroughValue"`
 	RuleMatchStrategy string `json:"ruleMatchStrategy,omitempty"`
 	Rules             []Rule `json:"rules"`
 }
@@ -31,17 +32,19 @@ type CreateFlagRequest struct {
 func main() {
 	flags := []CreateFlagRequest{
 		{
-			Key:          "defaultfeatureflag",
-			Name:         "Default Flag (No Rules)",
-			Enabled:      true,
-			DefaultValue: true,
-			Rules:        []Rule{},
+			Key:              "defaultfeatureflag",
+			Name:             "Default Flag (No Rules)",
+			Enabled:          true,
+			OffValue:         false,
+			FallthroughValue: true,
+			Rules:            []Rule{},
 		},
 		{
 			Key:               "attributesfeatureflag",
 			Name:              "Attributes Flag (Market/Product)",
 			Enabled:           true,
-			DefaultValue:      false,
+			OffValue:          false,
+			FallthroughValue:  false,
 			RuleMatchStrategy: "any",
 			Rules: []Rule{
 				{
@@ -65,10 +68,11 @@ func main() {
 			},
 		},
 		{
-			Key:          "userfeatureflag",
-			Name:         "User ID Flag",
-			Enabled:      true,
-			DefaultValue: false,
+			Key:              "userfeatureflag",
+			Name:             "User ID Flag",
+			Enabled:          true,
+			OffValue:         false,
+			FallthroughValue: false,
 			Rules: []Rule{
 				{
 					Type: "user_list",

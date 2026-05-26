@@ -11,7 +11,8 @@ export interface Flag {
   name: string;
   description: string;
   enabled: boolean;
-  defaultValue: boolean;
+  offValue: boolean;
+  fallthroughValue: boolean;
   ruleMatchStrategy: 'any' | 'all';
   rules: Rule[];
   createdAt?: string;
@@ -23,6 +24,9 @@ export interface Flag {
 export interface EvaluationContext {
   userId?: string;
   country?: string;
+  state?: string;
+  city?: string;
+  zipCode?: string;
   attributes?: Record<string, any>;
 }
 

@@ -18,7 +18,8 @@ def create_flag():
         "name": "On Off Feature Flag",
         "description": "A simple on/off flag with no rules",
         "enabled": True,
-        "defaultValue": True,
+        "offValue": False,
+        "fallthroughValue": True,
         "rules": [],
         "createdBy": "script-user"
     }

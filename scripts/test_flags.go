@@ -33,13 +33,13 @@ type TestCase struct {
 
 func main() {
 	testCases := []TestCase{
-		// 1. Default Flag (No Rules, Enabled=true, DefaultValue=true)
+		// 1. Default Flag (No Rules, Enabled=true, FallthroughValue=true)
 		{
 			Name:          "Default Flag - Positive",
 			FlagKey:       "defaultfeatureflag",
 			Context:       EvalContext{},
 			ExpectedValue: true,
-			InputDesc:     "SENT: {} | RULE: No rules, Default=true",
+			InputDesc:     "SENT: {} | RULE: No rules, Fallthrough=true",
 		},
 
 		// 2. Attributes Flag (Market=US OR Product=Pro)

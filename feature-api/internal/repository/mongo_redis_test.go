@@ -94,8 +94,11 @@ func (m *mockMongoCol) FindOneAndUpdate(ctx context.Context, filter interface{},
 			if d, ok := u["description"].(string); ok {
 				m.flags[i].Description = d
 			}
-			if dv, ok := u["defaultValue"].(bool); ok {
-				m.flags[i].DefaultValue = dv
+			if ov, ok := u["offValue"].(bool); ok {
+				m.flags[i].OffValue = ov
+			}
+			if fv, ok := u["fallthroughValue"].(bool); ok {
+				m.flags[i].FallthroughValue = fv
 			}
 			if r, ok := u["rules"].([]models.Rule); ok {
 				m.flags[i].Rules = r

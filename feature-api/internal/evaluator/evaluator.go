@@ -20,11 +20,11 @@ func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) mo
 	now := time.Now().UTC()
 
 	if !flag.Enabled {
-		return models.EvaluationResult{Enabled: false, Reason: "flag disabled"}
+		return models.EvaluationResult{Enabled: flag.OffValue, Reason: "flag disabled"}
 	}
 
 	if len(flag.Rules) == 0 {
-		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)"}
+		return models.EvaluationResult{Enabled: flag.FallthroughValue, Reason: "fallthrough value (no rules)"}
 	}
 
 	var result models.EvaluationResult
@@ -53,18 +53,18 @@ func (e *Evaluator) evaluateAny(flag *models.Flag, ctx models.EvaluationContext,
 	if hasTrueMatch {
 		return models.EvaluationResult{Enabled: true, Reason: "matched rule (permit)"}
 	}
-	return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value"}
+	return models.EvaluationResult{Enabled: flag.FallthroughValue, Reason: "fallthrough value"}
 }
 
 func (e *Evaluator) evaluateAll(flag *models.Flag, ctx models.EvaluationContext, now time.Time) models.EvaluationResult {
 	if len(flag.Rules) == 0 {
-		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)"}
+		return models.EvaluationResult{Enabled: flag.FallthroughValue, Reason: "fallthrough value (no rules)"}
 	}
 
 	for _, rule := range flag.Rules {
 		matched, _ := evalRule(rule, flag.Key, ctx, now)
 		if !matched {
-			return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "failed rule: " + string(rule.Type)}
+			return models.EvaluationResult{Enabled: flag.FallthroughValue, Reason: "failed rule: " + string(rule.Type)}
 		}
 	}
 	// All matched. Since validation ensures all rules have the same value for 'all' strategy,

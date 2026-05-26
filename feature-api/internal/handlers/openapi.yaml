@@ -149,7 +149,9 @@ components:
           type: string
         enabled:
           type: boolean
-        defaultValue:
+        offValue:
+          type: boolean
+        fallthroughValue:
           type: boolean
         rules:
           type: array
@@ -260,7 +262,9 @@ components:
           type: boolean
         description:
           type: string
-        defaultValue:
+        offValue:
+          type: boolean
+        fallthroughValue:
           type: boolean
         rules:
           type: array
@@ -279,7 +283,9 @@ components:
           type: boolean
         description:
           type: string
-        defaultValue:
+        offValue:
+          type: boolean
+        fallthroughValue:
           type: boolean
         rules:
           type: array
