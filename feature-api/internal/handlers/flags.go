@@ -148,6 +148,8 @@ func (h *Handler) mapRepoError(w http.ResponseWriter, err error, op string) {
 		writeError(w, http.StatusBadRequest, "no fields to update")
 	case errors.Is(err, repository.ErrAlreadyExists):
 		writeError(w, http.StatusConflict, "flag key already exists")
+	case errors.Is(err, repository.ErrInvalidRules):
+		writeError(w, http.StatusBadRequest, err.Error())
 	default:
 		h.logger.Error(op, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
@@ -176,6 +178,15 @@ func validateCreateRequest(req models.CreateFlagRequest) error {
 	if len(req.Key) > 64 {
 		return errors.New("key length exceeds 64 chars")
 	}
+	// Strict validation for 'all' strategy
+	if req.RuleMatchStrategy == models.RuleMatchStrategyAll && len(req.Rules) > 1 {
+		firstVal := req.Rules[0].Value
+		for i := 1; i < len(req.Rules); i++ {
+			if req.Rules[i].Value != firstVal {
+				return errors.New("all rules must have the same value when strategy is 'all'")
+			}
+		}
+	}
 	for _, r := range req.Rules {
 		if err := validateRule(r); err != nil {
 			return err
@@ -187,6 +198,18 @@ func validateCreateRequest(req models.CreateFlagRequest) error {
 func validateUpdateRequest(req models.UpdateFlagRequest) error {
 	if req.Key != nil && len(*req.Key) > 64 {
 		return errors.New("key length exceeds 64 chars")
+	}
+	// Note: Fully strict validation for 'all' strategy during partial updates (PATCH)
+	// is handled at the repository level where existing state is known.
+	// Here we only validate the incoming payload.
+	if req.RuleMatchStrategy != nil && *req.RuleMatchStrategy == models.RuleMatchStrategyAll && req.Rules != nil && len(*req.Rules) > 1 {
+		rules := *req.Rules
+		firstVal := rules[0].Value
+		for i := 1; i < len(rules); i++ {
+			if rules[i].Value != firstVal {
+				return errors.New("all rules must have the same value when strategy is 'all'")
+			}
+		}
 	}
 	if req.Rules != nil {
 		for _, r := range *req.Rules {

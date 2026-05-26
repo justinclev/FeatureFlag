@@ -39,6 +39,9 @@ seed-flags:
 test-flags:
 	go run scripts/test_flags.go
 
+check-conflict:
+	go run scripts/test_conflicting_rules.go
+
 test-all: seed-flags test-flags
 
 stress-test:

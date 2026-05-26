@@ -40,8 +40,9 @@ All requests (except "/health") require header: "X-API-KEY: <your-key>"
 
 Flags support two strategies for evaluating multiple rules via the "ruleMatchStrategy" field:
 
-- **"any" (Default)**: Short-circuit OR logic. Returns the value of the **first** rule that matches.
-- **"all"**: AND logic. Returns the value of the **last** rule only if **every** rule matches. If any rule fails, returns "defaultValue".
+- **"any" (Default)**: Priority **Deny Wins** logic. Evaluates all matching rules. If **any** matching rule has `value: false`, the result is `false`. Otherwise, if at least one matching rule is `true`, the result is `true`.
+- **"all"**: Strict AND logic. Returns `true` only if **every** rule matches. 
+    - **Validation**: All rules for an "all" strategy flag must have the same `value` (either all true or all false). Mismatched values will trigger a `400 Bad Request` error during creation or update.
 
 ### Example (ALL Strategy):
 ```json
@@ -55,7 +56,7 @@ Flags support two strategies for evaluating multiple rules via the "ruleMatchStr
   ]
 }
 ```
-*(Only returns "true" if user is in US **AND** has beta=true attribute)*
+*(Only returns "true" if user is in US **AND** has beta=true attribute. If either fails, returns `defaultValue`.)*
 
 ---
 

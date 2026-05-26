@@ -46,26 +46,37 @@ func (e *Evaluator) Evaluate(flag *models.Flag, ctx models.EvaluationContext) mo
 }
 
 func (e *Evaluator) evaluateAny(flag *models.Flag, ctx models.EvaluationContext, now time.Time) models.EvaluationResult {
+	hasTrueMatch := false
 	for _, rule := range flag.Rules {
 		matched, value := evalRule(rule, flag.Key, ctx, now)
 		if matched {
-			return models.EvaluationResult{Enabled: value, Reason: "matched rule: " + string(rule.Type)}
+			if !value {
+				// Deny Wins: immediately return false if any matching rule is false
+				return models.EvaluationResult{Enabled: false, Reason: "matched rule (deny): " + string(rule.Type)}
+			}
+			hasTrueMatch = true
 		}
+	}
+	if hasTrueMatch {
+		return models.EvaluationResult{Enabled: true, Reason: "matched rule (permit)"}
 	}
 	return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value"}
 }
 
 func (e *Evaluator) evaluateAll(flag *models.Flag, ctx models.EvaluationContext, now time.Time) models.EvaluationResult {
-	var lastValue bool
+	if len(flag.Rules) == 0 {
+		return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "default value (no rules)"}
+	}
+
 	for _, rule := range flag.Rules {
-		matched, value := evalRule(rule, flag.Key, ctx, now)
+		matched, _ := evalRule(rule, flag.Key, ctx, now)
 		if !matched {
 			return models.EvaluationResult{Enabled: flag.DefaultValue, Reason: "failed rule: " + string(rule.Type)}
 		}
-		lastValue = value
 	}
-	// All matched
-	return models.EvaluationResult{Enabled: lastValue, Reason: "matched all rules"}
+	// All matched. Since validation ensures all rules have the same value for 'all' strategy,
+	// we can return the value of the first rule.
+	return models.EvaluationResult{Enabled: flag.Rules[0].Value, Reason: "matched all rules"}
 }
 
 func evalRule(rule models.Rule, flagKey string, ctx models.EvaluationContext, now time.Time) (bool, bool) {

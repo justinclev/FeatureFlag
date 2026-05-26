@@ -106,7 +106,13 @@ Attributes Flag - Positive (Market) | attributesFeatureFlag | true       | true 
 Missing Flag - Negative             | NoFlagFlag           | false      | FALSE(404) | SENT: Key=NoFlagFlag | RULE: Non-existent [PASS]
 ```
 
-### 3. Stress Testing (Bombardier)
+### 3. Conflict Resolution Check
+Verify that conflicting rules follow the "Deny Wins" priority (for `any` strategy) and strict validation (for `all` strategy).
+```bash
+make check-conflict
+```
+
+### 4. Stress Testing (Bombardier)
 Execute a high-concurrency stress test that dynamically discovers flag rules and generates valid payloads to slam the evaluation endpoint.
 ```bash
 make stress-test

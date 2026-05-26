@@ -369,6 +369,25 @@ func (r *MongoRedisRepository) Update(ctx context.Context, id string, req models
 	if req.RuleMatchStrategy != nil {
 		fields["ruleMatchStrategy"] = *req.RuleMatchStrategy
 	}
+
+	// Strict validation for 'all' strategy consistency
+	finalStrategy := current.RuleMatchStrategy
+	if req.RuleMatchStrategy != nil {
+		finalStrategy = *req.RuleMatchStrategy
+	}
+	finalRules := current.Rules
+	if req.Rules != nil {
+		finalRules = *req.Rules
+	}
+	if finalStrategy == models.RuleMatchStrategyAll && len(finalRules) > 1 {
+		firstVal := finalRules[0].Value
+		for i := 1; i < len(finalRules); i++ {
+			if finalRules[i].Value != firstVal {
+				return nil, fmt.Errorf("%w: all rules must have the same value when strategy is 'all'", ErrInvalidRules)
+			}
+		}
+	}
+
 	if len(fields) == 0 {
 		return nil, ErrNoFields
 	}

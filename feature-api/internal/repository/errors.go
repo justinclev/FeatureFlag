@@ -8,4 +8,5 @@ var (
 	ErrInvalidID     = errors.New("invalid id")
 	ErrNoFields      = errors.New("no fields to update")
 	ErrAlreadyExists = errors.New("already exists")
+	ErrInvalidRules  = errors.New("invalid rules")
 )
