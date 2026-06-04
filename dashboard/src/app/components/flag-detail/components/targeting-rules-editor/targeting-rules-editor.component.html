@@ -1,0 +1,125 @@
+<div class="card" [ngClass]="{'dimmed': !enabled}">
+  <div class="section-title">
+    <span class="step-badge">3</span>
+    <h3>Targeting Rules</h3>
+    @if (!enabled) {
+      <span class="pill pill-muted ml-auto">Inactive</span>
+    }
+  </div>
+  
+  <div class="rules-container">
+    <div [formGroup]="form">
+      <div formArrayName="rules" class="rules-list">
+        @for (rule of rules.controls; track $index) {
+          <div [formGroupName]="$index" class="rule-item">
+            <div class="rule-top">
+              <div class="inner-field flex-grow">
+                <label class="inner-label">Rule Description</label>
+                <input formControlName="description" placeholder="Optional description for this rule...">
+              </div>
+              <select formControlName="type" class="type-select">
+                <option value="user_list">User List</option>
+                <option value="attribute">Attribute</option>
+                <option value="percentage">Percentage</option>
+                <option value="geography">Geography</option>
+                <option value="gradual">Gradual Rollout</option>
+                <option value="schedule">Time Schedule</option>
+              </select>
+
+              <label class="switch-small">
+                <input type="checkbox" formControlName="value">
+                <span class="slider-small round"></span>
+              </label>
+              <span class="rule-val-label">{{ rule.get('value')?.value ? 'Permit' : 'Deny' }}</span>
+              <button type="button" class="btn-icon delete-btn" (click)="removeRule.emit($index)">×</button>
+            </div>
+            
+            <div class="rule-config" [formGroupName]="'config'">
+              @if (rule.get('type')?.value === 'user_list') {
+                <div class="form-group no-margin">
+                  <label class="inner-label">User IDs</label>
+                  <input formControlName="userIds" placeholder="e.g. user-1, user-2">
+                </div>
+              }
+              @if (rule.get('type')?.value === 'attribute') {
+                <div class="attr-row">
+                  <div class="inner-field">
+                    <label class="inner-label">Key</label>
+                    <input formControlName="attributeKey" placeholder="plan">
+                  </div>
+                  <div class="inner-field">
+                    <label class="inner-label">Op</label>
+                    <select formControlName="attributeOp">
+                      <option value="eq">==</option>
+                      <option value="neq">!=</option>
+                      <option value="contains">contains</option>
+                      <option value="gt">></option>
+                      <option value="lt"><</option>
+                    </select>
+                  </div>
+                  <div class="inner-field">
+                    <label class="inner-label">Value</label>
+                    <input formControlName="attributeValue" placeholder="premium">
+                  </div>
+                </div>
+              }
+              @if (rule.get('type')?.value === 'percentage') {
+                <div class="range-group">
+                  <label class="inner-label">Traffic %</label>
+                  <div class="slider-val-row">
+                    <input type="range" formControlName="percentage" min="0" max="100" step="0.1">
+                    <span class="val-text">{{ rule.get('config.percentage')?.value }}%</span>
+                  </div>
+                </div>
+              }
+              @if (rule.get('type')?.value === 'geography') {
+                <div class="geo-grid">
+                  <div class="inner-field"><label class="inner-label">Countries</label><input formControlName="countries"></div>
+                  <div class="inner-field"><label class="inner-label">States</label><input formControlName="states"></div>
+                  <div class="inner-field"><label class="inner-label">Cities</label><input formControlName="cities"></div>
+                  <div class="inner-field"><label class="inner-label">Zip Codes</label><input formControlName="zipCodes"></div>
+                </div>
+              }
+              @if (rule.get('type')?.value === 'gradual') {
+                <div class="gradual-grid">
+                  <div class="inner-field"><label class="inner-label">Start %</label><input type="number" formControlName="startPercent"></div>
+                  <div class="inner-field"><label class="inner-label">End %</label><input type="number" formControlName="endPercent"></div>
+                  <div class="inner-field"><label class="inner-label">Start At</label><input type="datetime-local" formControlName="startAt"></div>
+                  <div class="inner-field"><label class="inner-label">End At</label><input type="datetime-local" formControlName="endAt"></div>
+                </div>
+              }
+              @if (rule.get('type')?.value === 'schedule') {
+                <div class="schedule-grid">
+                  <div class="inner-field"><label class="inner-label">From</label><input type="datetime-local" formControlName="enableAt"></div>
+                  <div class="inner-field"><label class="inner-label">To</label><input type="datetime-local" formControlName="disableAt"></div>
+                </div>
+              }
+            </div>
+          </div>
+        } @empty {
+          <div class="empty-rules">
+            <p>No targeting rules defined.</p>
+          </div>
+        }
+        <button type="button" class="btn btn-outline btn-block mt-md" (click)="addRule.emit()">+ Add Targeting Rule</button>
+      </div>
+    </div>
+
+    <!-- Fallthrough (The "Else") -->
+    <div class="fallthrough-box" [formGroup]="form">
+      <div class="decision-arrow">↓</div>
+      <div class="fallthrough-content">
+        <div class="control-item">
+          <label class="switch">
+            <input type="checkbox" formControlName="fallthroughValue">
+            <span class="slider round"></span>
+          </label>
+          <div class="label-group">
+            <span class="font-medium">Fallthrough Value (Default Rule)</span>
+            <span class="text-xs text-muted">Value returned if the flag is ENABLED but NO rules above match.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

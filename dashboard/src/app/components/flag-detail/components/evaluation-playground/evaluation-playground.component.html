@@ -1,0 +1,54 @@
+<div class="test-section">
+  <div class="test-header">
+    <h2>Try it out</h2>
+  </div>
+  <div class="card">
+    <p class="text-muted">Simulate evaluation with custom context.</p>
+    <div class="form-group">
+      <label>User ID</label>
+      <input [ngModel]="testContext().userId" (ngModelChange)="updateContext('userId', $event)" placeholder="e.g. user-123">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Country</label>
+        <input [ngModel]="testContext().country" (ngModelChange)="updateContext('country', $event)" placeholder="e.g. US">
+      </div>
+      <div class="form-group">
+        <label>State</label>
+        <input [ngModel]="testContext().state" (ngModelChange)="updateContext('state', $event)" placeholder="e.g. NY">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>City</label>
+        <input [ngModel]="testContext().city" (ngModelChange)="updateContext('city', $event)" placeholder="e.g. New York">
+      </div>
+      <div class="form-group">
+        <label>Zip Code</label>
+        <input [ngModel]="testContext().zipCode" (ngModelChange)="updateContext('zipCode', $event)" placeholder="e.g. 10001">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Attributes (JSON)</label>
+      <textarea [ngModel]="testAttributes()" (ngModelChange)="testAttributes.set($event)" rows="5" placeholder='{"plan": "premium"}'></textarea>
+    </div>
+    <button class="btn btn-secondary" (click)="test()" [disabled]="evaluating()">
+      {{ evaluating() ? 'Evaluating...' : 'Run Evaluation' }}
+    </button>
+
+    @if (evalError()) {
+      <div class="test-error">
+        {{ evalError() }}
+      </div>
+    }
+
+    @if (testResult()) {
+      <div class="test-result" [ngClass]="testResult()?.enabled ? 'res-success' : 'res-fail'">
+        <div class="res-head">
+          <strong>{{ testResult()?.enabled ? 'ENABLED' : 'DISABLED' }}</strong>
+        </div>
+        <div class="res-body">{{ testResult()?.reason }}</div>
+      </div>
+    }
+  </div>
+</div>

@@ -33,7 +33,7 @@ func Load() (*Config, error) {
 		RedisPass:           getEnv("REDIS_PASSWORD", ""),
 		RedisCachePrefix:    getEnv("REDIS_CACHE_PREFIX", "flags:id:"),
 		Port:                getEnv("PORT", "8080"),
-		CORSAllowedOrigin:   getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:4200"),
+		CORSAllowedOrigin:   getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:4800"),
 		CacheTTL:            time.Duration(getEnvInt("CACHE_TTL_SECONDS", 30)) * time.Second,
 		APIKey:              getEnv("API_KEY", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),

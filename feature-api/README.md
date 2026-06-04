@@ -19,7 +19,7 @@ Set via environment variables:
 | "CACHE_TTL_SECONDS" | Redis Cache TTL | "30" |
 | "LOG_LEVEL" | Logging level (debug, info, warn, error) | "info" |
 | "REQUEST_TIMEOUT_MS" | Internal request timeout | "5000" |
-| "CORS_ALLOWED_ORIGIN" | Allowed CORS origin | "http://localhost:4200" |
+| "CORS_ALLOWED_ORIGIN" | Allowed CORS origin | "http://localhost:4800" |
 
 ---
 

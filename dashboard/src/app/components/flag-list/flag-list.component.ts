@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { MatchStrategy } from '../../domain/models/flag.domain';
 import { FlagService } from '../../services/flag.service';
 
 @Component({
@@ -11,7 +12,9 @@ import { FlagService } from '../../services/flag.service';
     <div class="header">
       <div>
         <h1>Feature Flags</h1>
-        <p class="text-muted">Manage your deployment controls and rollout rules.</p>
+        <p class="text-muted">
+          {{ flagService.activeCount() }} of {{ flagService.flags().length }} flags are active.
+        </p>
       </div>
       <button class="btn btn-primary" routerLink="/flags/new">Create Flag</button>
     </div>
@@ -31,56 +34,68 @@ import { FlagService } from '../../services/flag.service';
           <button class="btn btn-sm" (click)="flagService.loadFlags()">Try Again</button>
         </div>
       } @else {
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Name & Key</th>
-              <th>Strategy</th>
-              <th>Rules</th>
-              <th>Last Updated</th>
-              <th>Updated By</th>
-              <th class="text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (flag of flagService.flags(); track flag.key) {
+        <div class="table-container">
+          <table class="table">
+            <thead>
               <tr>
-                <td style="width: 100px;">
-                  <span class="pill" [ngClass]="flag.enabled ? 'pill-success' : 'pill-muted'">
-                    {{ flag.enabled ? 'Active' : 'Disabled' }}
-                  </span>
-                </td>
-                <td>
-                  <div class="font-medium">{{ flag.name }}</div>
-                  <div class="text-xs text-muted">{{ flag.key }}</div>
-                </td>
-                <td>
-                  <span class="strategy-badge">{{ flag.ruleMatchStrategy }}</span>
-                </td>
-                <td>
-                  <span class="rules-count">{{ flag.rules ? flag.rules.length : 0 }}</span>
-                </td>
-                <td class="text-sm">
-                  {{ (flag.updatedAt || flag.createdAt) | date:'MMM d, HH:mm' }}
-                </td>
-                <td class="text-sm">
-                  {{ flag.updatedBy || flag.createdBy || 'System' }}
-                </td>
-                <td class="text-right">
-                  <a [routerLink]="['/flags', flag.id]" class="btn-action">Edit</a>
-                </td>
+                <th>Status</th>
+                <th>Name & Key</th>
+                <th class="hide-mobile">Strategy</th>
+                <th class="hide-tablet">Rules</th>
+                <th class="hide-tablet">Last Updated</th>
+                <th class="hide-mobile">Updated By</th>
+                <th class="text-right">Actions</th>
               </tr>
-            } @empty {
-              <tr>
-                <td colspan="7" class="empty-state">
-                  <p>No feature flags found.</p>
-                  <a routerLink="/flags/new" class="text-primary">Create your first flag</a>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (flag of flagService.flags(); track flag.key) {
+                <tr>
+                  <td class="status-cell">
+                    <span class="pill" [ngClass]="flag.enabled ? 'pill-success' : 'pill-muted'">
+                      {{ flag.enabled ? 'Active' : 'Disabled' }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="flag-identity">
+                      <span class="font-bold text-main">{{ flag.name }}</span>
+                      <code class="text-xs text-muted">{{ flag.key }}</code>
+                    </div>
+                  </td>
+                  <td class="hide-mobile">
+                    <span class="strategy-badge">{{ flag.ruleMatchStrategy }}</span>
+                  </td>
+                  <td class="hide-tablet">
+                    <span class="rules-count" [title]="(flag.rules.length || 0) + ' active rules'">
+                      {{ flag.rules ? flag.rules.length : 0 }}
+                    </span>
+                  </td>
+                  <td class="text-sm tabular-nums hide-tablet">
+                    {{ (flag.updatedAt || flag.createdAt) | date:'MMM d, HH:mm' }}
+                  </td>
+                  <td class="text-sm hide-mobile">
+                    {{ flag.updatedBy || flag.createdBy || 'System' }}
+                  </td>
+                  <td class="text-right">
+                    <div class="actions-group">
+                      <a [routerLink]="['/flags', flag.id]" class="btn-icon-action" aria-label="Edit feature flag">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="empty-state">
+                    <p>No feature flags found.</p>
+                    <a routerLink="/flags/new" class="text-primary">Create your first flag</a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       }
     </div>
   `,
@@ -128,9 +143,31 @@ import { FlagService } from '../../services/flag.service';
       vertical-align: middle;
     }
     .text-right { text-align: right; }
-    .font-medium { font-weight: 500; color: var(--text-main); }
-    .text-xs { font-size: 0.75rem; }
-    .text-sm { font-size: 0.875rem; color: var(--text-muted); }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    .flag-identity { display: flex; flex-direction: column; gap: 2px; }
+    .font-bold { font-weight: 600; }
+    .text-main { color: var(--text-main); }
+    .actions-group { display: flex; justify-content: flex-end; gap: 8px; }
+    .btn-icon-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      transition: all 0.2s;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+    }
+    .btn-icon-action svg { width: 16px; height: 16px; }
+    .btn-icon-action:hover {
+      background: #eff6ff;
+      color: var(--primary);
+      border-color: #bfdbfe;
+      transform: translateY(-1px);
+    }
+
     .strategy-badge {
       background: #f1f5f9;
       color: #475569;
@@ -153,16 +190,8 @@ import { FlagService } from '../../services/flag.service';
       font-size: 0.75rem;
       font-weight: 600;
     }
-    .btn-action {
-      color: var(--primary);
-      text-decoration: none;
-      font-size: 0.875rem;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 4px;
-      transition: background 0.2s;
-    }
-    .btn-action:hover { background: #f0f7ff; }
+    .text-sm { font-size: 0.875rem; color: var(--text-muted); }
+    .text-xs { font-size: 0.75rem; }
     
     .loading {
       display: flex;
@@ -181,6 +210,24 @@ import { FlagService } from '../../services/flag.service';
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 768px) {
+      .hide-mobile { display: none; }
+      .header { flex-direction: column; align-items: flex-start; gap: var(--space-md); }
+      .header .btn { width: 100%; }
+    }
+
+    @media (max-width: 1024px) {
+      .hide-tablet { display: none; }
+    }
+
+    .status-cell { width: 100px; }
 
     .error-container {
       padding: var(--space-xl);
@@ -202,6 +249,6 @@ export class FlagListComponent implements OnInit {
   constructor(public flagService: FlagService) {}
 
   ngOnInit() {
-    this.flagService.loadFlags();
+    this.flagService.loadFlags().subscribe();
   }
 }

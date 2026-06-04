@@ -45,7 +45,7 @@ def get_config(cfg, key):
 
 def predict_evaluation(flag, context, server_now=None):
     """Local implementation of evaluation logic matching Go backend exactly."""
-    now = server_now if server_now else datetime.now(timezone.utc)
+now = server_now if server_now else datetime.now(timezone.utc)
 
     if not flag.get("enabled", True):
         return flag.get("offValue", False), "flag disabled"

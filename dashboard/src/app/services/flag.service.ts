@@ -1,8 +1,8 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import { Flag, EvaluationContext, EvaluationResult } from '../models/flag.model';
-import { finalize } from 'rxjs';
+import { Flag, EvaluationContext, EvaluationResult } from '../domain/models/flag.domain';
+import { finalize, tap } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class FlagService {
@@ -12,31 +12,32 @@ export class FlagService {
     'Content-Type': 'application/json'
   });
 
-  flags = signal<Flag[]>([]);
-  loading = signal<boolean>(false);
-  error = signal<string | null>(null);
+  // --- State ---
+  private flagsState = signal<Flag[]>([]);
+  private loadingState = signal<boolean>(false);
+  private errorState = signal<string | null>(null);
+
+  // --- Selectors ---
+  flags = computed(() => this.flagsState());
+  loading = computed(() => this.loadingState());
+  error = computed(() => this.errorState());
+  activeCount = computed(() => this.flagsState().filter(f => f.enabled).length);
 
   constructor(private http: HttpClient) {}
 
+  // --- Actions ---
   loadFlags() {
-    console.log('Loading flags from:', `${this.apiUrl}/flags`);
-    this.loading.set(true);
-    this.error.set(null);
+    this.loadingState.set(true);
+    this.errorState.set(null);
     
-    this.http.get<Flag[]>(`${this.apiUrl}/flags`, { headers: this.headers })
+    return this.http.get<Flag[]>(`${this.apiUrl}/flags`, { headers: this.headers })
       .pipe(
-        finalize(() => this.loading.set(false))
-      )
-      .subscribe({
-        next: (flags) => {
-          console.log('Successfully loaded flags:', flags.length);
-          this.flags.set(flags);
-        },
-        error: (err) => {
-          console.error('API Error:', err);
-          this.error.set(`Failed to connect to API (${err.status}: ${err.statusText || 'Unknown Error'}). Ensure API is running at ${this.apiUrl}`);
-        }
-      });
+        finalize(() => this.loadingState.set(false)),
+        tap({
+          next: (flags) => this.flagsState.set(flags),
+          error: (err) => this.errorState.set(`Connection failed: ${err.status}`)
+        })
+      );
   }
 
   getFlag(id: string) {
@@ -44,15 +45,21 @@ export class FlagService {
   }
 
   createFlag(flag: Flag) {
-    return this.http.post<Flag>(`${this.apiUrl}/flags`, flag, { headers: this.headers });
+    return this.http.post<Flag>(`${this.apiUrl}/flags`, flag, { headers: this.headers }).pipe(
+      tap(newFlag => this.flagsState.update(list => [...list, newFlag]))
+    );
   }
 
   updateFlag(id: string, flag: Partial<Flag>) {
-    return this.http.patch<Flag>(`${this.apiUrl}/flags/${id}`, flag, { headers: this.headers });
+    return this.http.patch<Flag>(`${this.apiUrl}/flags/${id}`, flag, { headers: this.headers }).pipe(
+      tap(updated => this.flagsState.update(list => list.map(f => f.id === id ? updated : f)))
+    );
   }
 
   deleteFlag(id: string) {
-    return this.http.delete(`${this.apiUrl}/flags/${id}`, { headers: this.headers });
+    return this.http.delete(`${this.apiUrl}/flags/${id}`, { headers: this.headers }).pipe(
+      tap(() => this.flagsState.update(list => list.filter(f => f.id !== id)))
+    );
   }
 
   evaluate(key: string, context: EvaluationContext) {

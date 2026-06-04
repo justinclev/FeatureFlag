@@ -1,0 +1,75 @@
+<form [formGroup]="form">
+  <!-- Section 1: Identity -->
+  <div class="card mb-lg">
+    <div class="section-title">
+      <span class="step-badge">1</span>
+      <h3>Identity & Strategy</h3>
+    </div>
+    <div class="form-group">
+      <label>Flag Name</label>
+      <input formControlName="name" placeholder="e.g. New Beta Feature" [ngClass]="{'input-error': form.get('name')?.invalid && form.get('name')?.touched}">
+      @if (form.get('name')?.invalid && form.get('name')?.touched) {
+        <span class="error-text">Name is required.</span>
+      }
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea formControlName="description" rows="2" placeholder="Describe the purpose of this flag..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Key</label>
+        <input formControlName="key" placeholder="e.g. new-beta-feature"
+          [ngClass]="{'input-error': form.get('key')?.invalid && form.get('key')?.touched, 'input-locked': form.get('key')?.disabled}">
+        @if (form.get('key')?.disabled) {
+          <span class="hint-text">Key cannot be changed after creation.</span>
+        } @else if (form.get('key')?.invalid && form.get('key')?.touched) {
+          <span class="error-text">
+            @if (form.get('key')?.errors?.['required']) { Key is required. }
+            @else if (form.get('key')?.errors?.['pattern']) { Key must be lowercase alphanumeric with hyphens, underscores, or dots. }
+          </span>
+        }
+      </div>
+      <div class="form-group">
+        <label>Rule Match Strategy</label>
+        <select formControlName="ruleMatchStrategy" [ngClass]="{'input-error': form.errors?.['inconsistentRules']}">
+          <option value="any">ANY (Short-circuit / Deny Wins)</option>
+          <option value="all">ALL (Must match every rule)</option>
+        </select>
+        @if (form.errors?.['inconsistentRules']) {
+          <span class="error-text">All rules must have the same Permit/Deny value for ALL strategy.</span>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Safety & Master Switch -->
+  <div class="card mb-lg highlight-card" [ngClass]="{'card-off': !form.get('enabled')?.value}">
+    <div class="section-title">
+      <span class="step-badge">2</span>
+      <h3>Master Control & Safety</h3>
+    </div>
+    <div class="control-grid">
+      <div class="control-item">
+        <label class="switch-large">
+          <input type="checkbox" formControlName="enabled">
+          <span class="slider-large round"></span>
+        </label>
+        <div class="label-group">
+          <span class="control-label">{{ form.get('enabled')?.value ? 'ENABLED' : 'DISABLED' }}</span>
+          <span class="text-xs text-muted">Master toggle for this feature flag.</span>
+        </div>
+      </div>
+      <div class="control-item">
+        <label class="switch">
+          <input type="checkbox" formControlName="offValue">
+          <span class="slider round"></span>
+        </label>
+        <div class="label-group">
+          <span class="font-medium">Off Value</span>
+          <span class="text-xs text-muted">Constant value returned when master toggle is OFF.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>

@@ -16,6 +16,13 @@ const (
 	RuleMatchStrategyAll RuleMatchStrategy = "all"
 )
 
+// HistoryEntry records a single change event on a flag.
+type HistoryEntry struct {
+	ChangedAt time.Time `bson:"changedAt" json:"changedAt"`
+	ChangedBy string    `bson:"changedBy" json:"changedBy"`
+	Summary   string    `bson:"summary"   json:"summary"`
+}
+
 // Flag is the domain model stored in MongoDB.
 type Flag struct {
 	ID                bson.ObjectID     `bson:"_id,omitempty"     json:"id"`
@@ -31,6 +38,7 @@ type Flag struct {
 	UpdatedAt          time.Time         `bson:"updatedAt"         json:"updatedAt"`
 	UpdatedBy          string            `bson:"updatedBy"         json:"updatedBy"`
 	Enabled            bool              `bson:"enabled"           json:"enabled"`
+	History            []HistoryEntry    `bson:"history"           json:"history"`
 }
 
 // Clone returns a true deep copy of the Flag.

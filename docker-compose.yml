@@ -58,6 +58,7 @@ services:
       - "GOMAXPROCS=4"
       - "LOG_LEVEL=debug"
       - "REQUEST_TIMEOUT_MS=5000"
+      - "CORS_ALLOWED_ORIGIN=http://localhost:4800"
     ulimits:
       nofile:
         soft: 65535
@@ -82,7 +83,7 @@ services:
     container_name: dashboard
     restart: unless-stopped
     ports:
-      - "4200:8080"
+      - "4800:8080"
     depends_on:
       - feature-api
     networks:

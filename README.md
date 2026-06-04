@@ -5,7 +5,7 @@ A microservices platform for managing and distributing feature flags, composed o
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Browser                                            │
-│  http://localhost:4200                              │
+│  http://localhost:4800                              │
 │         │                                           │
 │    ┌────▼────────────┐                              │
 │    │   dashboard     │  Angular 19 / nginx          │
@@ -26,7 +26,7 @@ A microservices platform for managing and distributing feature flags, composed o
 
 | Service         | URL                          | Port (Host) | Description                      |
 | --------------- | ---------------------------- | ----------- | -------------------------------- |
-| `dashboard`     | http://localhost:4200        | 4200        | Angular management UI            |
+| `dashboard`     | http://localhost:4800        | 4800        | Angular management UI            |
 | `feature-api`   | http://localhost:8081/health | 8081        | Go distribution data plane       |
 | `mongo`         | localhost:27018              | 27018       | MongoDB 7 (Data Store)           |
 | `redis`         | localhost:6380               | 6380        | Redis 7 (Flag Read Cache)        |
@@ -47,7 +47,7 @@ git clone https://github.com/justinclev/FeatureFlag.git && cd FeatureFlags
 docker compose up --build
 
 # 3. Open the dashboard
-open http://localhost:4200
+open http://localhost:4800
 ```
 
 > **Note:** The `feature-api` requires an `X-API-KEY` header for all requests except `/health`. The default key in Docker Compose is `test-api-key`.
@@ -65,7 +65,7 @@ docker compose down
 ```bash
 cd dashboard
 npm install
-npm start          # http://localhost:4200
+npm start          # http://localhost:4800
 ```
 
 ### feature-api (Go)
@@ -141,7 +141,7 @@ make stress-test
 | `CACHE_TTL_SECONDS`     | `30`                        | Redis cache TTL                           |
 | `LOG_LEVEL`             | `info`                      | Logging level (debug, info, warn, error)  |
 | `REQUEST_TIMEOUT_MS`    | `5000`                      | Internal request timeout                  |
-| `CORS_ALLOWED_ORIGIN`   | `http://localhost:4200`     | Allowed CORS origin                       |
+| `CORS_ALLOWED_ORIGIN`   | `http://localhost:4800`     | Allowed CORS origin                       |
 
 ## CI/CD
 

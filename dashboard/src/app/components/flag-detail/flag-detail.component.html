@@ -1,0 +1,74 @@
+<div class="detail-layout">
+  <div class="editor-section">
+    <div class="header">
+      <a routerLink="/flags" class="back-link">← Back to flags</a>
+      @if (loading()) {
+        <h1>Loading...</h1>
+      } @else if (loadError()) {
+        <h1>Flag not found</h1>
+      } @else {
+        <h1>{{ isNew ? 'Create' : 'Edit' }} Feature Flag</h1>
+      }
+    </div>
+
+    @if (loadError()) {
+      <div class="load-error">
+        <p>{{ loadError() }}</p>
+        <a routerLink="/flags" class="btn btn-outline">← Back to flags</a>
+      </div>
+    } @else {
+      <app-identity-safety-editor [form]="flagForm"></app-identity-safety-editor>
+
+      <app-targeting-rules-editor
+        [form]="flagForm"
+        [enabled]="flagForm.get('enabled')?.value ?? true"
+        (addRule)="addRule()"
+        (removeRule)="removeRule($event)">
+      </app-targeting-rules-editor>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving() || flagForm.invalid || loading()">
+          {{ saving() ? 'Saving...' : (isNew ? 'Create Flag' : 'Save Changes') }}
+        </button>
+        @if (!isNew) {
+          <button type="button" class="btn btn-danger" (click)="delete()">Delete</button>
+        }
+      </div>
+      @if (error()) {
+        <div class="test-error mt-md">
+          {{ error() }}
+        </div>
+      }
+      @if (saveSuccess()) {
+        <div class="save-success">Changes saved</div>
+      }
+
+      @if (!isNew && flagHistory().length > 0) {
+        <div class="card history-card">
+          <h3 class="history-title">Change History</h3>
+          <ul class="history-list">
+            @for (entry of flagHistory(); track entry.changedAt) {
+              <li class="history-entry">
+                <span class="history-summary">{{ entry.summary }}</span>
+                <span class="history-meta">
+                  {{ entry.changedAt | date:'MMM d, y HH:mm' }}
+                  @if (entry.changedBy) { · {{ entry.changedBy }} }
+                </span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    }
+  </div>
+
+  <div class="test-section">
+    @if (!isNew && flagForm.get('key')?.value) {
+      <app-evaluation-playground [flagKey]="flagForm.get('key')?.value"></app-evaluation-playground>
+    } @else {
+      <div class="card dimmed">
+        <p class="text-muted">Save the flag to enable the test playground.</p>
+      </div>
+    }
+  </div>
+</div>
